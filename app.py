@@ -122,7 +122,7 @@ def create_main_dashboard():
         training_ratio = st.slider("AI 훈련 비율", 0.0, 1.0, 0.4, 0.1, key="training_ratio")
         moe_ratio = st.slider("MoE 비율", 0.0, 1.0, 0.2, 0.1, key="moe_ratio")
         
-        # 정규화
+        # 정규화 및 세션 상태에 저장
         total_ratio = llm_ratio + training_ratio + moe_ratio
         if total_ratio > 0:
             workload_mix = {
@@ -132,6 +132,8 @@ def create_main_dashboard():
             }
         else:
             workload_mix = {'llm': 1.0, 'training': 0.0, 'moe': 0.0}
+        
+        st.session_state.workload_mix = workload_mix
         
         # M4. DC Bus 설정
         st.subheader("⚡ M4. DC Bus")
@@ -192,7 +194,7 @@ def run_simulation():
                 gpu_type=st.session_state.gpu_type,
                 gpu_count=st.session_state.gpu_count,
                 pue_tier=st.session_state.pue_tier,
-                workload_mix=st.session_state.get('workload_mix', {'llm': 0.4, 'training': 0.4, 'moe': 0.2})
+                workload_mix=st.session_state.workload_mix
             )
             
             dcbus = DCBusModule(
@@ -778,7 +780,7 @@ def display_statistics(data):
         mismatch_hourly = pv_hourly - aidc_hourly
         
         fig = px.imshow(
-            mismatch_hourly,
+            mismatch_hourly.tolist(),  # Convert numpy array to list
             x=[f"{h:02d}:00" for h in range(24)],
             y=['월', '화', '수', '목', '금', '토', '일'],
             color_continuous_scale='RdYlGn',
@@ -790,7 +792,7 @@ def display_statistics(data):
         st.plotly_chart(fig, use_container_width=True)
     
     # 월별/계절별 통계 (연간 시뮬레이션인 경우)
-    if len(pv_data) >= 8760:
+    if len(pv_data['power_mw']) >= 8760:
         st.subheader("📅 월별 에너지 수지")
         
         # 월별 집계 로직 구현
@@ -877,8 +879,8 @@ def display_hess_results(data):
     })
     
     fig = px.bar(
-        x=layer_soc_data.columns,
-        y=layer_soc_data.iloc[0],
+        x=list(layer_soc_data.columns),
+        y=layer_soc_data.iloc[0].tolist(),
         title="HESS 레이어별 SOC",
         labels={'x': '레이어', 'y': 'SOC (%)'}
     )
@@ -890,16 +892,16 @@ def display_hess_results(data):
     
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=hess_data.index,
-        y=hess_data['power_delivered_kw'] / 1000,
+        x=list(hess_data.index),
+        y=(hess_data['power_delivered_kw'] / 1000).tolist(),
         mode='lines',
         name='운전 전력 (MW)',
         line=dict(color=COLOR_PALETTE['bess'])
     ))
     
     fig.add_trace(go.Scatter(
-        x=hess_data.index,
-        y=hess_data['average_soc'] * 100,
+        x=list(hess_data.index),
+        y=(hess_data['average_soc'] * 100).tolist(),
         mode='lines',
         name='평균 SOC (%)',
         yaxis='y2',
@@ -1007,8 +1009,8 @@ def display_h2_results(data):
         
         if not p2g_data.empty:
             fig.add_trace(go.Scatter(
-                x=p2g_data.index,
-                y=p2g_data['power_kw'] / 1000,
+                x=list(p2g_data.index),
+                y=(p2g_data['power_kw'] / 1000).tolist(),
                 mode='markers',
                 marker=dict(size=10, color=COLOR_PALETTE['pv']),
                 name='P2G (MW)'
@@ -1016,8 +1018,8 @@ def display_h2_results(data):
         
         if not g2p_data.empty:
             fig.add_trace(go.Scatter(
-                x=g2p_data.index,
-                y=g2p_data['power_kw'] / 1000,
+                x=list(g2p_data.index),
+                y=(g2p_data['power_kw'] / 1000).tolist(),
                 mode='markers',
                 marker=dict(size=10, color=COLOR_PALETTE['h2']),
                 name='G2P (MW)'
@@ -1106,12 +1108,12 @@ def display_grid_results(data):
         fig = go.Figure()
         
         fig.add_trace(go.Scatter(
-            x=grid_data.index,
-            y=grid_data['power_mw'],
+            x=list(grid_data.index),
+            y=grid_data['power_mw'].tolist(),
             mode='markers+lines',
             marker=dict(
                 size=8,
-                color=grid_data['power_mw'],
+                color=grid_data['power_mw'].tolist(),
                 colorscale='RdYlBu',
                 colorbar=dict(title="전력 (MW)")
             ),
@@ -1134,8 +1136,8 @@ def display_grid_results(data):
         
         fig2 = go.Figure()
         fig2.add_trace(go.Scatter(
-            x=grid_data.index,
-            y=grid_data['smp_price'],
+            x=list(grid_data.index),
+            y=grid_data['smp_price'].tolist(),
             mode='lines',
             name='SMP 가격',
             line=dict(color=COLOR_PALETTE['surplus'])

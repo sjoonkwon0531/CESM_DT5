@@ -139,15 +139,25 @@ class PVModule:
     
     def _calculate_controlled_power(self, efficiency: float, ghi: float) -> float:
         """능동 제어 출력 계산"""
-        # 제어 신호 생성 (현재는 단순 랜덤, 실제로는 EMS에서 제어)
-        v_factor = np.random.uniform(*self.control_v_range)
-        j_factor = np.random.uniform(*self.control_j_range)
-        
-        # V(t) × J(t) 제어
-        control_factor = v_factor * j_factor
-        
         base_power = self._calculate_fixed_power(efficiency, ghi)
-        controlled_power = base_power * control_factor
+        
+        if base_power <= 0:
+            return 0.0
+        
+        # 능동 제어 효과:
+        # 1. MPPT 최적화: +3~7% 출력 향상
+        # 2. 부분 음영 손실 저감: +2~5% 
+        # 3. DC 버스 전압 안정화: +1~3%
+        
+        # 종합 성능 향상: 5~15% (일사량에 따라 가변)
+        improvement_base = 0.05  # 최소 5%
+        improvement_variable = 0.10 * (ghi / 1000)  # 일사량 비례 (최대 10%)
+        improvement_random = np.random.uniform(0, 0.02)  # 제어 변동성 ±2%
+        
+        total_improvement = improvement_base + improvement_variable + improvement_random
+        total_improvement = min(total_improvement, 0.15)  # 최대 15% 제한
+        
+        controlled_power = base_power * (1.0 + total_improvement)
         
         return min(controlled_power, self.capacity_mw)
     
