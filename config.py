@@ -101,20 +101,20 @@ PUE_TIERS = {
 WORKLOAD_TYPES = {
     "llm": {
         "name": "LLM 추론",
-        "base_utilization": 0.3,
-        "peak_utilization": 0.9,
-        "burst_frequency": 10  # per hour
+        "base_utilization": 0.55,       # 실제 AIDC 평균 GPU 활용률 50-70% (Google TPU report)
+        "peak_utilization": 0.98,       # API surge 시 거의 full
+        "burst_frequency": 10           # per hour
     },
     "training": {
         "name": "AI 훈련",
-        "base_utilization": 0.8,
-        "peak_utilization": 1.0,
-        "burst_frequency": 1
+        "base_utilization": 0.85,       # Training은 sustained high (Meta LLaMA 3: 85-95%)
+        "peak_utilization": 1.0,        # Checkpoint spike 시 100%
+        "burst_frequency": 2            # checkpoint + gradient sync
     },
     "moe": {
         "name": "MoE (Mixture of Experts)",
-        "base_utilization": 0.2,
-        "peak_utilization": 0.7,
+        "base_utilization": 0.40,       # Expert 20-30% 동시 활성 → base 높임
+        "peak_utilization": 0.95,       # 다수 expert 동시 활성화 시
         "burst_frequency": 20
     }
 }

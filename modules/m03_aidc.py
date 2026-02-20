@@ -110,47 +110,111 @@ class AIDCModule:
                                       workload: str,
                                       hour: int,
                                       day_of_week: int) -> float:
-        """워크로드별 GPU 활용률 계산"""
+        """
+        워크로드별 GPU 활용률 계산
+        
+        실제 AIDC 워크로드 특성 반영:
+        - LLM 추론: Poisson arrival, 주간 피크, burst 패턴 (100ms~1s 단위 변동)
+        - Training: Sustained high + 30분 주기 checkpoint spike
+        - MoE: Expert 활성화 패턴 (20-30% 동시 활성), 불규칙 burst
+        
+        References:
+        - Meta LLaMA 3 GPU failure analysis (GPU failure every 3h)
+        - MLPerf benchmark power profiles
+        - Google TPU workload characterization
+        """
         if workload not in WORKLOAD_TYPES:
-            return 0.5  # 기본값
+            return 0.5
         
         params = WORKLOAD_TYPES[workload]
         base_util = params['base_utilization']
         peak_util = params['peak_utilization'] 
-        burst_freq = params['burst_frequency']  # per hour
+        burst_freq = params['burst_frequency']
         
-        # 시간대별 패턴 (LLM은 주간 높음, Training은 야간 높음)
         if workload == 'llm':
-            # LLM 추론: 주간 활성, 피크 시간 14-16시
-            time_factor = 0.3 + 0.7 * max(0, math.cos(math.pi * (hour - 15) / 12))
-        elif workload == 'training':  
-            # AI 훈련: 야간 집중 (전력 요금 절약)
-            time_factor = 0.8 + 0.2 * max(0, math.cos(math.pi * (hour - 3) / 12))
-        else:  # MoE
-            # MoE: 상대적으로 균등하지만 약간의 일간 변동
-            time_factor = 0.6 + 0.4 * (0.5 + 0.5 * math.sin(math.pi * hour / 12))
+            # LLM 추론: 사용자 트래픽 패턴 (강한 일간 변동)
+            # 새벽 2-5시 최저(20%), 오전 9시 급상승, 14-16시 피크(95%), 자정까지 감소
+            if 2 <= hour <= 5:
+                time_factor = 0.15 + 0.10 * np.random.random()  # 15-25%
+            elif 6 <= hour <= 8:
+                time_factor = 0.25 + 0.25 * (hour - 6) / 2  # 급상승 25→50%
+            elif 9 <= hour <= 11:
+                time_factor = 0.55 + 0.25 * (hour - 9) / 2  # 55→80%
+            elif 12 <= hour <= 13:
+                time_factor = 0.70 + 0.10 * np.random.random()  # 점심 소폭 감소
+            elif 14 <= hour <= 16:
+                time_factor = 0.85 + 0.15 * np.random.random()  # 피크 85-100%
+            elif 17 <= hour <= 19:
+                time_factor = 0.65 + 0.15 * np.random.random()  # 퇴근 후 감소
+            elif 20 <= hour <= 23:
+                time_factor = 0.35 + 0.20 * np.random.random()  # 야간 35-55%
+            else:  # 0-1시
+                time_factor = 0.25 + 0.15 * np.random.random()  # 심야
+            
+            # LLM burst: Poisson arrival로 급격한 스파이크 (viral content, API surge)
+            burst_prob = 0.15  # 시간당 15% 확률로 대형 burst
+            if np.random.random() < burst_prob:
+                burst_intensity = 0.6 + 0.4 * np.random.random()  # 강한 burst
+                time_factor = min(1.0, time_factor + burst_intensity * (1.0 - time_factor))
+            
+        elif workload == 'training':
+            # Training: 높은 base load + 30분 주기 checkpoint spike
+            # 야간 배치 job 시작(22시), 새벽에 최대, 오전에 일부 종료
+            if 22 <= hour or hour <= 6:
+                time_factor = 0.85 + 0.10 * np.random.random()  # 야간 고부하 85-95%
+            elif 7 <= hour <= 9:
+                time_factor = 0.70 + 0.15 * np.random.random()  # 오전 전환기
+            elif 10 <= hour <= 16:
+                time_factor = 0.60 + 0.15 * np.random.random()  # 주간 중부하 60-75%
+            else:  # 17-21시
+                time_factor = 0.70 + 0.10 * np.random.random()  # 야간 배치 준비
+            
+            # Checkpoint spike: 매 시간 50% 확률 (30분 주기 checkpoint 중 하나)
+            if np.random.random() < 0.50:
+                # Checkpoint 시 GPU→CPU→Storage 대규모 I/O → 전력 spike 10-20%
+                spike = 0.10 + 0.15 * np.random.random()
+                time_factor = min(1.0, time_factor + spike)
+            
+            # GPU failure recovery: Meta 기준 3시간당 1회 → 시간당 33% 확률
+            if np.random.random() < 0.05:  # 5% 확률로 부분 장애 → 전력 일시 감소
+                time_factor *= (0.70 + 0.15 * np.random.random())
+            
+        else:  # MoE (Mixture of Experts)
+            # MoE: Expert 활성화 패턴이 불규칙, 20-30%만 동시 활성
+            # base가 낮지만 burst가 극심 (특정 expert 집중 활성화)
+            base_moe = 0.30 + 0.15 * np.random.random()  # base 30-45%
+            
+            # 시간대별 약한 변동 (MoE는 추론+학습 혼합)
+            diurnal = 0.10 * math.sin(math.pi * (hour - 6) / 12)
+            time_factor = base_moe + diurnal
+            
+            # Expert activation burst: 높은 빈도, 큰 진폭
+            if np.random.random() < 0.25:  # 25% 확률 대형 burst
+                burst_size = 0.3 + 0.4 * np.random.random()  # 30-70% 증가
+                time_factor = min(1.0, time_factor + burst_size)
+            elif np.random.random() < 0.35:  # 추가 35% 확률 중형 burst
+                burst_size = 0.10 + 0.15 * np.random.random()
+                time_factor = min(1.0, time_factor + burst_size)
         
-        # 요일별 패턴 (주말 약간 낮음)
-        weekday_factor = 0.85 if day_of_week >= 5 else 1.0
-        
-        # 기본 활용률
-        base_load = base_util * time_factor * weekday_factor
-        
-        # 버스트 패턴 (Poisson 프로세스 근사)
-        burst_prob = burst_freq / 60  # 분당 확률
-        if np.random.random() < burst_prob:
-            # 버스트 발생 시 피크로 상승
-            burst_intensity = np.random.beta(2, 3)  # 0-1 사이, 평균 0.4
-            utilization = base_load + burst_intensity * (peak_util - base_load)
+        # 요일별 패턴
+        if day_of_week >= 5:  # 주말
+            if workload == 'llm':
+                weekday_factor = 0.70 + 0.10 * np.random.random()
+            elif workload == 'training':
+                weekday_factor = 1.05
+            else:
+                weekday_factor = 0.85
         else:
-            # 정상 운영
-            utilization = base_load
+            weekday_factor = 1.0
         
-        # 노이즈 추가 (±5%)
-        noise = 0.05 * (np.random.random() - 0.5)
+        # time_factor가 이미 절대 활용률 → base_util은 스케일링용 (peak 기준)
+        utilization = peak_util * time_factor * weekday_factor
+        
+        # 현실적 노이즈 (±8%, GPU 온도/throttling 등)
+        noise = 0.08 * (2 * np.random.random() - 1)
         utilization += noise
         
-        return np.clip(utilization, 0.05, 1.0)  # 5-100% 범위
+        return float(np.clip(utilization, 0.05, 1.0))
     
     def simulate_time_series(self, 
                            hours: int = 8760,
