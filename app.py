@@ -585,13 +585,76 @@ def display_aidc_results(data):
             st.write(f"- {name}: {ratio:.1%}")
         
         # 부하 통계
-        stats = aidc_module.get_statistics(aidc_data)
+        stats = aidc_module.get_statistics(data['aidc'])
         
         st.write("**부하 통계**")
         st.metric("평균 전력", f"{stats.get('avg_power_mw', 0):.1f} MW")
         st.metric("피크 전력", f"{stats.get('peak_power_mw', 0):.1f} MW")
         st.metric("부하율", f"{stats.get('load_factor', 0):.1%}")
         st.metric("실제 PUE", f"{stats.get('actual_pue', 0):.2f}")
+    
+    # 분단위 줌인 차트
+    st.subheader("🔬 AIDC 부하 줌인 (분단위 해상도)")
+    st.caption("특정 시간대의 분단위 전력 변동을 시뮬레이션합니다. LLM burst, checkpoint spike, GPU throttling 등 실제 AIDC 이벤트를 반영합니다.")
+    
+    zoom_col1, zoom_col2 = st.columns([1, 3])
+    with zoom_col1:
+        zoom_hour = st.selectbox("줌인 시간대", list(range(24)), index=14, format_func=lambda h: f"{h:02d}:00")
+    
+    minute_data = aidc_module.simulate_minute_resolution(
+        hour_of_day=zoom_hour, day_of_week=2, minutes=60, random_seed=zoom_hour * 7
+    )
+    
+    minutes = [d['minute'] for d in minute_data]
+    powers = [d['total_power_mw'] for d in minute_data]
+    events = [d['event'] for d in minute_data]
+    
+    # 이벤트별 색상
+    event_colors = {
+        'normal': 'rgba(100,100,100,0.3)',
+        'llm_burst': 'rgba(255,100,100,0.8)',
+        'checkpoint': 'rgba(255,200,0,0.8)',
+        'expert_activation': 'rgba(100,200,255,0.8)',
+        'throttling': 'rgba(150,150,255,0.8)',
+        'gpu_failure': 'rgba(255,0,0,0.9)'
+    }
+    marker_colors = [event_colors.get(e, 'gray') for e in events]
+    
+    fig_zoom = go.Figure()
+    fig_zoom.add_trace(go.Scatter(
+        x=minutes, y=powers,
+        mode='lines+markers',
+        line=dict(color=COLOR_PALETTE['aidc'], width=1.5),
+        marker=dict(size=5, color=marker_colors),
+        name='전력 (MW)',
+        hovertemplate='%{x}분: %{y:.2f} MW<br>이벤트: %{text}',
+        text=events
+    ))
+    
+    fig_zoom.update_layout(
+        height=350,
+        title=f"AIDC 부하 분단위 프로파일 ({zoom_hour:02d}:00-{zoom_hour:02d}:59)",
+        xaxis_title="분 (minute)",
+        yaxis_title="전력 (MW)",
+        showlegend=False
+    )
+    
+    st.plotly_chart(fig_zoom, use_container_width=True)
+    
+    # 이벤트 범례
+    event_counts = {}
+    for e in events:
+        event_counts[e] = event_counts.get(e, 0) + 1
+    
+    event_labels = {
+        'normal': '정상 운영', 'llm_burst': '🔴 LLM Burst',
+        'checkpoint': '🟡 Checkpoint Spike', 'expert_activation': '🔵 Expert Activation',
+        'throttling': '🟣 GPU Throttling', 'gpu_failure': '⛔ GPU Failure'
+    }
+    
+    legend_parts = [f"{event_labels.get(k,k)}: {v}회" for k, v in event_counts.items() if k != 'normal']
+    if legend_parts:
+        st.caption("이벤트: " + " | ".join(legend_parts))
 
 
 def display_dcbus_results(data):
@@ -665,7 +728,7 @@ def display_dcbus_results(data):
     st.plotly_chart(fig, use_container_width=True)
     
     # DC Bus 통계
-    summary = dcbus_module.get_energy_flows_summary(dcbus_data)
+    summary = dcbus_module.get_energy_flows_summary(data['dcbus'])
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -758,15 +821,15 @@ def display_statistics(data):
         
         # 시스템 전체 효율
         dcbus_module = data['modules']['dcbus']
-        summary = dcbus_module.get_energy_flows_summary(dcbus_data)
+        summary = dcbus_module.get_energy_flows_summary(data['dcbus'])
         
         st.metric("시스템 효율", f"{summary.get('system_efficiency', 0)*100:.1f}%")
         st.metric("변환 손실", f"{summary.get('total_losses_mwh', 0):.1f} MWh")
         
         # 평균 용량 이용률
-        avg_pv_cf = sum(pv_data['capacity_factor']) / len(pv_data['capacity_factor']) if pv_data['capacity_factor'] else 0
-        aidc_mean = sum(aidc_data['total_power_mw']) / len(aidc_data['total_power_mw']) if aidc_data['total_power_mw'] else 0
-        aidc_max = max(aidc_data['total_power_mw']) if aidc_data['total_power_mw'] else 0
+        avg_pv_cf = sum(pv_data['capacity_factor']) / len(pv_data['capacity_factor']) if len(pv_data['capacity_factor']) > 0 else 0
+        aidc_mean = sum(aidc_data['total_power_mw']) / len(aidc_data['total_power_mw']) if len(aidc_data['total_power_mw']) > 0 else 0
+        aidc_max = max(aidc_data['total_power_mw']) if len(aidc_data['total_power_mw']) > 0 else 0
         avg_aidc_cf = aidc_mean / aidc_max if aidc_max > 0 else 0
         
         st.metric("PV 이용률", f"{avg_pv_cf:.1%}")

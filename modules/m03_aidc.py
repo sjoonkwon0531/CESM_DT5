@@ -216,6 +216,100 @@ class AIDCModule:
         
         return float(np.clip(utilization, 0.05, 1.0))
     
+    def simulate_minute_resolution(self,
+                                  hour_of_day: int = 14,
+                                  day_of_week: int = 2,
+                                  minutes: int = 60,
+                                  random_seed: Optional[int] = None) -> List[Dict]:
+        """
+        분단위 고해상도 시뮬레이션 (1시간 줌인용)
+        
+        실제 AIDC 전력 변동:
+        - LLM 추론 burst: 100ms~1s 단위 (여기선 분 단위로 근사)
+        - Training checkpoint: ~30초 spike
+        - GPU throttling: 수초 단위 전력 감소
+        - Cooling fan ramp: 10-30초 응답
+        
+        Returns:
+            분단위 부하 리스트 [{minute, total_power_mw, gpu_utilization, event}, ...]
+        """
+        if random_seed is not None:
+            np.random.seed(random_seed)
+        
+        # 해당 시간의 base load 계산
+        base_load = self.calculate_load_at_time(hour_of_day, day_of_week)
+        base_power = base_load['total_power_mw']
+        base_util = base_load['gpu_utilization']
+        
+        results = []
+        current_power = base_power
+        current_util = base_util
+        
+        # 이벤트 스케줄 생성
+        # Checkpoint: 매 30분마다 (분 0, 30 근처)
+        checkpoint_minutes = set()
+        for cp in [0, 30]:
+            for offset in range(-1, 3):
+                checkpoint_minutes.add(cp + offset)
+        
+        for m in range(minutes):
+            event = "normal"
+            power_mod = 0.0
+            util_mod = 0.0
+            
+            # 1) LLM burst (Poisson arrival, 분당 ~20% 확률)
+            if np.random.random() < 0.20:
+                burst = np.random.exponential(0.08) * base_power  # 평균 8% spike
+                power_mod += burst
+                util_mod += burst / base_power * base_util if base_power > 0 else 0
+                event = "llm_burst"
+            
+            # 2) Training checkpoint spike (30분 주기)
+            if m % 60 in checkpoint_minutes and self.workload_mix.get('training', 0) > 0:
+                cp_spike = (0.10 + 0.10 * np.random.random()) * base_power * self.workload_mix['training']
+                power_mod += cp_spike
+                util_mod += 0.05 + 0.05 * np.random.random()
+                event = "checkpoint"
+            
+            # 3) MoE expert activation (불규칙, 분당 15% 확률)
+            if np.random.random() < 0.15 and self.workload_mix.get('moe', 0) > 0:
+                expert_burst = (0.05 + 0.15 * np.random.random()) * base_power * self.workload_mix['moe']
+                power_mod += expert_burst
+                event = "expert_activation" if event == "normal" else event
+            
+            # 4) GPU thermal throttling (분당 5% 확률, 전력 감소)
+            if np.random.random() < 0.05:
+                throttle = -(0.03 + 0.05 * np.random.random()) * base_power
+                power_mod += throttle
+                event = "throttling"
+            
+            # 5) Micro-fluctuation (항상, ±3%)
+            noise = base_power * 0.03 * (2 * np.random.random() - 1)
+            power_mod += noise
+            
+            # 6) 가끔 큰 drop (GPU failure/restart, 분당 1%)
+            if np.random.random() < 0.01:
+                drop = -(0.10 + 0.10 * np.random.random()) * base_power
+                power_mod += drop
+                event = "gpu_failure"
+            
+            minute_power = max(0.05 * self.max_total_power_mw, current_power + power_mod)
+            minute_util = np.clip(current_util + util_mod + 0.03 * (2 * np.random.random() - 1), 0.05, 1.0)
+            
+            # Smoothing: 현재값과 새값의 가중평균 (관성)
+            alpha = 0.6  # 새 값 비중
+            current_power = alpha * minute_power + (1 - alpha) * current_power
+            current_util = alpha * minute_util + (1 - alpha) * current_util
+            
+            results.append({
+                'minute': m,
+                'total_power_mw': float(current_power),
+                'gpu_utilization': float(current_util),
+                'event': event
+            })
+        
+        return results
+
     def simulate_time_series(self, 
                            hours: int = 8760,
                            start_hour: int = 0,
