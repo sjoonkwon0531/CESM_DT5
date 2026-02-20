@@ -11,6 +11,20 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import os
 
+
+def _to_list(v):
+    """Convert numpy arrays to Python lists for Plotly compatibility."""
+    if isinstance(v, np.ndarray):
+        return v.tolist()
+    return v
+
+
+def _safe_dict(d):
+    """Convert all numpy arrays in a dict to Python lists."""
+    if isinstance(d, dict):
+        return {k: _to_list(v) for k, v in d.items()}
+    return d
+
 # 모듈 임포트
 from modules import (
     PVModule, AIDCModule, DCBusModule, WeatherModule,
@@ -338,12 +352,12 @@ def display_power_balance(data):
     """전력 균형 결과 표시"""
     st.subheader("⚖️ 전력 공급 vs 수요")
     
-    pv_data = data['pv']
-    aidc_data = data['aidc']
-    dcbus_data = data['dcbus']
+    pv_data = _safe_dict(data['pv'])
+    aidc_data = _safe_dict(data['aidc'])
+    dcbus_data = _safe_dict(data['dcbus'])
     
     # 시간축 생성
-    hours = range(len(pv_data))
+    hours = list(range(len(pv_data['power_mw'])))
     
     # 메인 전력 균형 차트
     fig = make_subplots(
@@ -370,7 +384,7 @@ def display_power_balance(data):
     )
     
     # 하단: 미스매치
-    mismatch = pv_data['power_mw'] - aidc_data['total_power_mw']
+    mismatch = [p - a for p, a in zip(pv_data['power_mw'], aidc_data['total_power_mw'])]
     colors = [COLOR_PALETTE['surplus'] if x >= 0 else COLOR_PALETTE['deficit'] for x in mismatch]
     
     fig.add_trace(
@@ -400,19 +414,19 @@ def display_power_balance(data):
     with col1:
         st.metric(
             "총 PV 발전량", 
-            f"{pv_data['power_mw'].sum():.0f} MWh",
-            delta=f"CF: {pv_data['capacity_factor'].mean():.1%}"
+            f"{sum(pv_data['power_mw']):.0f} MWh",
+            delta=f"CF: {sum(pv_data['capacity_factor'])/len(pv_data['capacity_factor']):.1%}"
         )
     
     with col2:
         st.metric(
             "총 AIDC 소비량",
-            f"{aidc_data['total_power_mw'].sum():.0f} MWh",
-            delta=f"평균: {aidc_data['total_power_mw'].mean():.1f} MW"
+            f"{sum(aidc_data['total_power_mw']):.0f} MWh",
+            delta=f"평균: {sum(aidc_data['total_power_mw'])/len(aidc_data['total_power_mw']):.1f} MW"
         )
     
     with col3:
-        surplus_hours = (mismatch > 0).sum()
+        surplus_hours = sum(1 for x in mismatch if x > 0)
         st.metric(
             "잉여 전력 시간",
             f"{surplus_hours}h",
@@ -420,7 +434,7 @@ def display_power_balance(data):
         )
     
     with col4:
-        deficit_hours = (mismatch < 0).sum()
+        deficit_hours = sum(1 for x in mismatch if x < 0)
         st.metric(
             "부족 전력 시간",
             f"{deficit_hours}h", 
@@ -432,8 +446,8 @@ def display_pv_results(data):
     """PV 발전 결과 표시"""
     st.subheader("☀️ PV 발전 분석")
     
-    pv_data = data['pv']
-    weather_data = data['weather']
+    pv_data = _safe_dict(data['pv'])
+    weather_data = _safe_dict(data['weather'])
     pv_module = data['modules']['pv']
     
     col1, col2 = st.columns([2, 1])
@@ -446,7 +460,7 @@ def display_pv_results(data):
             specs=[[{"secondary_y": True}], [{}]]
         )
         
-        hours = range(len(pv_data))
+        hours = list(range(len(pv_data['power_mw'])))
         
         # PV 출력
         fig.add_trace(
@@ -507,7 +521,7 @@ def display_aidc_results(data):
     """AIDC 부하 결과 표시"""
     st.subheader("🖥️ AIDC 부하 분석")
     
-    aidc_data = data['aidc']
+    aidc_data = _safe_dict(data['aidc'])
     aidc_module = data['modules']['aidc']
     
     col1, col2 = st.columns([2, 1])
@@ -519,7 +533,7 @@ def display_aidc_results(data):
             subplot_titles=['전력 소비 프로파일 (MW)', 'GPU 활용률 (%)']
         )
         
-        hours = range(len(aidc_data))
+        hours = list(range(len(aidc_data['total_power_mw'])))
         
         # 전력 소비
         fig.add_trace(
@@ -584,11 +598,11 @@ def display_dcbus_results(data):
     """DC Bus 결과 표시"""
     st.subheader("🔄 DC Bus 전력 분배")
     
-    dcbus_data = data['dcbus']
+    dcbus_data = _safe_dict(data['dcbus'])
     dcbus_module = data['modules']['dcbus']
     
     # 전력 흐름 Sankey 다이어그램 (단순화)
-    hours = range(len(dcbus_data))
+    hours = list(range(len(dcbus_data['bess_charge_mw'])))
     
     # 전력 흐름 분석
     fig = make_subplots(
@@ -684,18 +698,20 @@ def display_statistics(data):
     """통계 분석 표시"""
     st.subheader("📈 종합 통계 분석")
     
-    # 데이터 준비
-    pv_data = data['pv'] 
-    aidc_data = data['aidc']
-    dcbus_data = data['dcbus']
+    # 데이터 준비 (numpy 유지 for 계산, plotly에 넘길때만 변환)
+    pv_data_raw = data['pv']
+    aidc_data_raw = data['aidc']
+    pv_data = _safe_dict(pv_data_raw)
+    aidc_data = _safe_dict(data['aidc'])
+    dcbus_data = _safe_dict(data['dcbus'])
     
     # 시간별 히트맵 (잉여/부족 전력)
     st.subheader("⏰ 시간대별 전력 미스매치 패턴")
     
-    if len(pv_data) >= 168:  # 1주 이상 데이터
+    if len(pv_data['power_mw']) >= 168:  # 1주 이상 데이터
         # 주간 패턴 분석
-        pv_hourly = pv_data['power_mw'].values.reshape(-1, 24)[:7]  # 1주일
-        aidc_hourly = aidc_data['total_power_mw'].values.reshape(-1, 24)[:7]
+        pv_hourly = np.array(pv_data['power_mw']).reshape(-1, 24)[:7]  # 1주일
+        aidc_hourly = np.array(aidc_data['total_power_mw']).reshape(-1, 24)[:7]
         mismatch_hourly = pv_hourly - aidc_hourly
         
         fig = px.imshow(
@@ -725,15 +741,15 @@ def display_statistics(data):
     
     with col1:
         st.write("**에너지 지표**")
-        total_pv = pv_data['power_mw'].sum()
-        total_aidc = aidc_data['total_power_mw'].sum()
+        total_pv = sum(pv_data['power_mw'])
+        total_aidc = sum(aidc_data['total_power_mw'])
         
         st.metric("PV 발전량", f"{total_pv:.0f} MWh")
         st.metric("AIDC 소비량", f"{total_aidc:.0f} MWh") 
         st.metric("에너지 자립률", f"{min(total_pv/total_aidc*100, 100):.1f}%" if total_aidc > 0 else "N/A")
         
         # 그리드 의존도
-        grid_import = dcbus_data['grid_import_mw'].sum()
+        grid_import = sum(dcbus_data['grid_import_mw'])
         grid_dependence = grid_import / total_aidc * 100 if total_aidc > 0 else 0
         st.metric("그리드 의존도", f"{grid_dependence:.1f}%")
     
@@ -748,8 +764,10 @@ def display_statistics(data):
         st.metric("변환 손실", f"{summary.get('total_losses_mwh', 0):.1f} MWh")
         
         # 평균 용량 이용률
-        avg_pv_cf = pv_data['capacity_factor'].mean()
-        avg_aidc_cf = aidc_data['total_power_mw'].mean() / aidc_data['total_power_mw'].max() if aidc_data['total_power_mw'].max() > 0 else 0
+        avg_pv_cf = sum(pv_data['capacity_factor']) / len(pv_data['capacity_factor']) if pv_data['capacity_factor'] else 0
+        aidc_mean = sum(aidc_data['total_power_mw']) / len(aidc_data['total_power_mw']) if aidc_data['total_power_mw'] else 0
+        aidc_max = max(aidc_data['total_power_mw']) if aidc_data['total_power_mw'] else 0
+        avg_aidc_cf = aidc_mean / aidc_max if aidc_max > 0 else 0
         
         st.metric("PV 이용률", f"{avg_pv_cf:.1%}")
         st.metric("AIDC 부하율", f"{avg_aidc_cf:.1%}")
