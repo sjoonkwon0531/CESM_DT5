@@ -1,7 +1,7 @@
 """
 CEMS-DT Modules Package
 각 시스템 컴포넌트를 모듈화
-Week 1 Core + Week 2 Extensions + Week 3 Intelligence
+Week 1 Core + Week 2 Extensions + Week 3 Intelligence + Week 4 Decision
 """
 
 # Week 1 Core Modules
@@ -20,6 +20,11 @@ from .m06_ai_ems import AIEMSModule
 from .m07_carbon import CarbonAccountingModule
 from .m09_economics import EconomicsModule
 
+# Week 4 Decision Modules
+from .m11_policy import PolicySimulator
+from .m12_industry import IndustryModel
+from .m13_investment import InvestmentDashboard
+
 __all__ = [
     # Week 1
     'PVModule',
@@ -34,4 +39,8 @@ __all__ = [
     'AIEMSModule',
     'CarbonAccountingModule',
     'EconomicsModule',
+    # Week 4
+    'PolicySimulator',
+    'IndustryModel',
+    'InvestmentDashboard',
 ]

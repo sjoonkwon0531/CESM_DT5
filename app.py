@@ -29,7 +29,8 @@ def _safe_dict(d):
 from modules import (
     PVModule, AIDCModule, DCBusModule, WeatherModule,
     HESSModule, H2SystemModule, GridInterfaceModule,
-    AIEMSModule, CarbonAccountingModule, EconomicsModule
+    AIEMSModule, CarbonAccountingModule, EconomicsModule,
+    PolicySimulator, IndustryModel, InvestmentDashboard
 )
 from config import (
     PV_TYPES, GPU_TYPES, PUE_TIERS, WORKLOAD_TYPES, 
@@ -74,6 +75,11 @@ def create_main_dashboard():
     # 사이드바 - 시스템 파라미터 설정
     with st.sidebar:
         st.header("🔧 시스템 설정")
+        
+        # 언어 선택
+        language = st.selectbox(
+            "🌐 Language", ["KO", "EN", "CN"],
+            key="language", index=0)
         
         # M1. PV 모듈 설정
         st.subheader("🌞 M1. PV 발전")
@@ -377,10 +383,12 @@ def display_results():
     data = st.session_state.simulation_data
     
     # 탭 구성
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, \
+        tab12, tab13, tab14, tab15 = st.tabs([
         "📊 전력 균형", "☀️ PV 발전", "🖥️ AIDC 부하", 
         "🔄 DC Bus", "🔋 HESS", "⚡ H₂ 시스템", "🔌 그리드",
-        "🤖 AI-EMS", "🌍 탄소 회계", "💰 경제성", "📈 통계 분석"
+        "🤖 AI-EMS", "🌍 탄소 회계", "💰 경제성", "📈 통계 분석",
+        "🏛️ 정책 시뮬레이터", "🏭 산업 상용화", "📋 투자 대시보드", "📚 References"
     ])
     
     with tab1:
@@ -415,6 +423,18 @@ def display_results():
     
     with tab11:
         display_statistics(data)
+    
+    with tab12:
+        display_policy_simulator()
+    
+    with tab13:
+        display_industry_model()
+    
+    with tab14:
+        display_investment_dashboard()
+    
+    with tab15:
+        display_references()
 
 
 def display_power_balance(data):
@@ -1464,6 +1484,339 @@ def display_grid_results(data):
         
     else:
         st.info("그리드 거래 데이터가 없습니다.")
+
+
+# ═══════════════════════════════════════════════════════════════
+# 다국어 지원 (i18n) — KO 완성, EN/CN 키만 준비
+# ═══════════════════════════════════════════════════════════════
+I18N = {
+    "KO": {
+        "policy_tab": "🏛️ 정책 시뮬레이터",
+        "industry_tab": "🏭 산업 상용화",
+        "investment_tab": "📋 투자 대시보드",
+        "references_tab": "📚 References",
+        "carbon_price": "탄소가격 (₩/tCO₂)",
+        "rec_price": "REC 가격 (₩/MWh)",
+        "subsidy_rate": "보조금 비율 (%)",
+        "csp_select": "CSP 선택",
+        "go_decision": "투자 판정",
+        "base_scenario": "Base (현행)",
+        "combined_scenario": "복합 (정책 강화)",
+        "optimal_scenario": "최적 (보조금+정책)",
+        "irr": "IRR (%)",
+        "npv": "NPV (억원)",
+        "payback": "회수 기간 (년)",
+        "capex": "CAPEX (억원)",
+        "annual_revenue": "연간 수익 (억원)",
+        "co2_reduction": "CO₂ 감축 (tCO₂/년)",
+    },
+    "EN": {
+        "policy_tab": "🏛️ Policy Simulator",
+        "industry_tab": "🏭 Industry Model",
+        "investment_tab": "📋 Investment Dashboard",
+        "references_tab": "📚 References",
+        "carbon_price": "Carbon Price (₩/tCO₂)",
+        "rec_price": "REC Price (₩/MWh)",
+        "subsidy_rate": "Subsidy Rate (%)",
+        "csp_select": "Select CSP",
+        "go_decision": "Investment Decision",
+    },
+    "CN": {
+        "policy_tab": "🏛️ 政策模拟器",
+        "industry_tab": "🏭 产业商用化",
+        "investment_tab": "📋 投资决策面板",
+        "references_tab": "📚 参考资料",
+        "carbon_price": "碳价格 (₩/tCO₂)",
+    },
+}
+
+
+def _t(key: str) -> str:
+    """다국어 텍스트 반환"""
+    lang = st.session_state.get("language", "KO")
+    return I18N.get(lang, I18N["KO"]).get(key, I18N["KO"].get(key, key))
+
+
+# ═══════════════════════════════════════════════════════════════
+# Week 4 탭: 정책 시뮬레이터
+# ═══════════════════════════════════════════════════════════════
+def display_policy_simulator():
+    """정책 시뮬레이터 탭"""
+    st.subheader("🏛️ 정책 시뮬레이터")
+    st.markdown("K-ETS, REC, CBAM, RE100, 전력수급계획 시나리오 분석")
+
+    sim = PolicySimulator()
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        carbon_price = st.slider(
+            "K-ETS 탄소가격 (₩/tCO₂)", 10_000, 150_000, 25_000, 5_000,
+            key="policy_carbon")
+    with col2:
+        rec_price = st.slider(
+            "REC 가격 (₩/MWh)", 10_000, 80_000, 25_000, 5_000,
+            key="policy_rec")
+    with col3:
+        subsidy_pct = st.slider(
+            "보조금 비율 (%)", 0, 30, 0, 5, key="policy_subsidy") / 100
+
+    # K-ETS 시나리오
+    st.markdown("### K-ETS 탄소가격 시나리오")
+    k_ets_results = sim.k_ets_scenarios_compare()
+    cols = st.columns(3)
+    for i, (label, result) in enumerate(zip(
+            ["현행 25,000", "중간 50,000", "강화 100,000"], k_ets_results)):
+        with cols[i]:
+            st.metric(label=f"{label} ₩/tCO₂",
+                      value=f"{result['annual_revenue_billion_krw']:.0f}억/년",
+                      delta=f"NPV {result['npv_billion_krw']:.0f}억")
+
+    # CBAM
+    st.markdown("### CBAM 영향")
+    cbam = sim.cbam_impact(eu_carbon_price_eur=80)
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.metric("CBAM 비용 (CEMS 없이)", f"{cbam['cbam_cost_without_cems_billion_krw']:.1f}억/년")
+    with col_b:
+        st.metric("CBAM 절감 (CEMS 적용)", f"{cbam['cbam_savings_billion_krw']:.1f}억/년")
+
+    # RE100
+    st.markdown("### RE100 달성률")
+    re100 = sim.re100_achievement()
+    st.progress(min(re100["achievement_pct"] / 100, 1.0))
+    st.write(f"달성률: **{re100['achievement_pct']}%** | 부족: {re100['gap_mwh']:,.0f} MWh")
+
+    # 정책 조합 히트맵
+    st.markdown("### 정책 조합 IRR 히트맵")
+    hm = sim.policy_heatmap_data()
+    fig = go.Figure(data=go.Heatmap(
+        z=hm["irr_matrix"],
+        x=[f"{p/1000:.0f}k" for p in hm["rec_prices"]],
+        y=[f"{p/1000:.0f}k" for p in hm["carbon_prices"]],
+        colorscale="RdYlGn",
+        text=[[f"{v:.1f}%" for v in row] for row in hm["irr_matrix"]],
+        texttemplate="%{text}",
+        colorbar=dict(title="IRR (%)"),
+    ))
+    fig.update_layout(
+        title="탄소가격 × REC 가격 → IRR (%)",
+        xaxis_title="REC 가격 (₩/MWh)",
+        yaxis_title="K-ETS 탄소가격 (₩/tCO₂)",
+        height=400)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# Week 4 탭: 산업 상용화
+# ═══════════════════════════════════════════════════════════════
+def display_industry_model():
+    """산업 상용화 탭"""
+    st.subheader("🏭 산업 상용화 모델")
+    st.markdown("CSP별 맞춤 분석 + BYOG + 스케일링")
+
+    model = IndustryModel()
+
+    from modules.m12_industry import CSP_PROFILES
+    csp_keys = list(CSP_PROFILES.keys())
+    csp_names = [CSP_PROFILES[k]["name"] for k in csp_keys]
+
+    csp_selected = st.selectbox(
+        "CSP 선택", csp_keys,
+        format_func=lambda x: f"{CSP_PROFILES[x]['name']} ({CSP_PROFILES[x]['description']})",
+        key="csp_select")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        ind_subsidy = st.slider("보조금 (%)", 0, 30, 0, 5, key="ind_subsidy") / 100
+    with col2:
+        ind_carbon = st.slider("탄소가격 (₩/tCO₂)", 10_000, 150_000, 25_000, 5_000,
+                                key="ind_carbon")
+
+    # 선택된 CSP 분석
+    result = model.csp_analysis(csp_selected, subsidy_pct=ind_subsidy,
+                                 carbon_price_krw=ind_carbon)
+
+    st.markdown(f"### {result['csp_name']} 분석 결과")
+    cols = st.columns(4)
+    cols[0].metric("에너지 CAPEX", f"{result['energy_capex_billion_krw']:,.0f}억")
+    cols[1].metric("연간 수익", f"{result['annual_revenue_billion_krw']:,.0f}억")
+    cols[2].metric("IRR", f"{result['irr_pct']:.1f}%" if result['irr_pct'] else "N/A")
+    cols[3].metric("Payback", f"{result['payback_years']:.1f}년")
+
+    col_a, col_b = st.columns(2)
+    col_a.metric("연간 CO₂ 감축", f"{result['annual_co2_reduction_ton']:,.0f} tCO₂")
+    col_b.metric("20년 CO₂ 감축", f"{result['lifetime_co2_reduction_kton']:,.0f} 천tCO₂")
+
+    # 전체 CSP 비교
+    st.markdown("### 전체 CSP 비교")
+    all_csp = model.all_csp_comparison(subsidy_pct=ind_subsidy, carbon_price_krw=ind_carbon)
+
+    fig = go.Figure()
+    names = [c["csp_name"] for c in all_csp]
+    fig.add_trace(go.Bar(name="에너지 CAPEX (억)", x=names,
+                         y=[c["energy_capex_billion_krw"] for c in all_csp]))
+    fig.add_trace(go.Bar(name="연간 수익 (억)", x=names,
+                         y=[c["annual_revenue_billion_krw"] for c in all_csp]))
+    fig.update_layout(barmode="group", height=400,
+                      title="CSP별 CAPEX vs 연간 수익")
+    st.plotly_chart(fig, use_container_width=True)
+
+    # 스케일링 분석
+    st.markdown("### 스케일링 분석 (규모의 경제)")
+    scaling = model.scaling_analysis()
+    fig2 = go.Figure()
+    caps = [s["capacity_mw"] for s in scaling]
+    fig2.add_trace(go.Scatter(x=caps, y=[s["irr_pct"] or 0 for s in scaling],
+                              mode="lines+markers", name="IRR (%)"))
+    fig2.update_layout(title="용량별 IRR", xaxis_title="용량 (MW)",
+                       yaxis_title="IRR (%)", height=350)
+    st.plotly_chart(fig2, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# Week 4 탭: 투자 대시보드
+# ═══════════════════════════════════════════════════════════════
+def display_investment_dashboard():
+    """투자 의사결정 대시보드"""
+    st.subheader("📋 투자 의사결정 대시보드")
+
+    dash = InvestmentDashboard()
+
+    # What-if 슬라이더
+    st.markdown("### NPV/IRR What-if 분석")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        capex_var = st.slider("CAPEX 변동 (%)", -30, 30, 0, 5, key="inv_capex") / 100
+    with col2:
+        rev_var = st.slider("수익 변동 (%)", -30, 30, 0, 5, key="inv_rev") / 100
+    with col3:
+        inv_dr = st.slider("할인율 (%)", 3, 10, 5, 1, key="inv_dr") / 100
+
+    whatif = dash.whatif_analysis(capex_variation=capex_var,
+                                  revenue_variation=rev_var,
+                                  discount_rate=inv_dr)
+
+    cols = st.columns(3)
+    cols[0].metric("NPV", f"{whatif['npv_billion_krw']:,.0f}억",
+                   delta=f"{'양' if whatif['npv_billion_krw'] > 0 else '음'}수")
+    cols[1].metric("IRR", f"{whatif['irr_pct']:.1f}%" if whatif["irr_pct"] else "N/A")
+    cols[2].metric("Payback", f"{whatif['payback_years']:.1f}년")
+
+    # MC 히스토그램
+    st.markdown("### Monte Carlo 시뮬레이션 (10,000회)")
+    mc = dash.monte_carlo(n_iterations=10_000)
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        fig_irr = go.Figure()
+        fig_irr.add_trace(go.Histogram(
+            x=mc["irr_distribution"], nbinsx=50,
+            marker_color="#2E8B57", name="IRR"))
+        fig_irr.add_vline(x=mc["irr_mean_pct"], line_dash="dash",
+                          annotation_text=f"Mean: {mc['irr_mean_pct']:.1f}%")
+        fig_irr.update_layout(title="IRR 분포", xaxis_title="IRR (%)",
+                              yaxis_title="빈도", height=350)
+        st.plotly_chart(fig_irr, use_container_width=True)
+
+    with col_b:
+        fig_npv = go.Figure()
+        fig_npv.add_trace(go.Histogram(
+            x=mc["npv_distribution"], nbinsx=50,
+            marker_color="#DAA520", name="NPV"))
+        fig_npv.add_vline(x=0, line_dash="solid", line_color="red",
+                          annotation_text="BEP")
+        fig_npv.update_layout(title="NPV 분포", xaxis_title="NPV (억원)",
+                              yaxis_title="빈도", height=350)
+        st.plotly_chart(fig_npv, use_container_width=True)
+
+    st.info(f"P(NPV>0) = **{mc['prob_positive_npv_pct']:.1f}%** | "
+            f"IRR p5-p95 = [{mc['irr_p5_pct']:.1f}%, {mc['irr_p95_pct']:.1f}%]")
+
+    # 시나리오 비교
+    st.markdown("### 시나리오 비교")
+    scenarios = dash.scenario_comparison()
+    import pandas as pd
+    df = pd.DataFrame(scenarios)
+    st.dataframe(df[["scenario", "capex_billion_krw", "annual_revenue_billion_krw",
+                      "irr_pct", "npv_billion_krw", "payback_years"]],
+                 hide_index=True)
+
+    # Go/No-Go 신호등
+    st.markdown("### 투자 의사결정 (Go/No-Go)")
+    decision = dash.go_nogo_decision(
+        irr_pct=whatif["irr_pct"] or 0,
+        npv_billion=whatif["npv_billion_krw"],
+        payback_years=whatif["payback_years"],
+        prob_positive_npv_pct=mc["prob_positive_npv_pct"])
+
+    color_map = {"green": "🟢", "yellow": "🟡", "red": "🔴"}
+    st.markdown(f"## {color_map.get(decision['color'], '⚪')} {decision['decision']}")
+    st.write(decision["recommendation"])
+
+    for name, crit in decision["criteria"].items():
+        icon = "✅" if crit["pass"] else "❌"
+        st.write(f"{icon} {crit['label']}")
+
+    # 보조금 민감도
+    st.markdown("### 보조금 민감도")
+    sub_results = dash.subsidy_sensitivity()
+    fig_sub = go.Figure()
+    fig_sub.add_trace(go.Bar(
+        x=[f"{r['subsidy_pct']:.0f}%" for r in sub_results],
+        y=[r["irr_pct"] or 0 for r in sub_results],
+        marker_color=["#DC143C" if (r["irr_pct"] or 0) < 5 else "#2E8B57"
+                      for r in sub_results],
+        text=[f"{r['irr_pct']:.1f}%" if r["irr_pct"] else "N/A" for r in sub_results],
+        textposition="auto"))
+    fig_sub.update_layout(title="보조금 비율별 IRR",
+                          xaxis_title="보조금", yaxis_title="IRR (%)",
+                          height=350)
+    st.plotly_chart(fig_sub, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# Week 4 탭: References
+# ═══════════════════════════════════════════════════════════════
+def display_references():
+    """참고 자료 탭"""
+    st.subheader("📚 References")
+
+    st.markdown("""
+### 데이터셋 출처
+- **한국 기상청 (KMA)**: 일사량, 기온 데이터 — [data.kma.go.kr](https://data.kma.go.kr)
+- **한국전력거래소 (KPX)**: SMP 가격, 전력수급 — [epsis.kpx.or.kr](https://epsis.kpx.or.kr)
+- **에너지경제연구원 (KEEI)**: 에너지 통계 — [keei.re.kr](https://www.keei.re.kr)
+
+### 참고 논문/보고서
+1. NREL (2024), *Utility-Scale Solar PV LCOE*, Annual Technology Baseline
+2. BloombergNEF (2024), *Lithium-Ion Battery Pack Prices*
+3. IEA (2024), *Global Hydrogen Review*
+4. McKinsey (2024), *The Green Data Center Revolution*
+5. 한국에너지공단 (2024), *신재생에너지 백서*
+
+### 정책 자료
+- **K-ETS**: [환경부 온실가스종합정보센터](https://ngms.gir.go.kr) — 배출권거래제 운영
+- **전력수급기본계획**: [산업통상자원부](https://motie.go.kr) — 제11차 전력수급기본계획
+- **CBAM**: [EU CBAM Regulation (2023/956)](https://eur-lex.europa.eu) — Carbon Border Adjustment Mechanism
+- **RE100**: [The Climate Group RE100](https://www.there100.org) — 글로벌 RE100 이니셔티브
+- **REC 시장**: [한국에너지공단 신재생에너지센터](https://www.knrec.or.kr)
+
+### 기술 참고
+- NVIDIA H100/B200 Datasheet
+- Samsung SDI ESS Battery Specifications
+- Bloom Energy SOFC Technical Data
+- Nel Hydrogen Electrolyzer Specifications
+
+### 경제성 모델 가정
+| 항목 | 값 | 출처 |
+|------|------|------|
+| 할인율 | 5% | 한국개발연구원 (KDI) |
+| PV CAPEX | 1,500억/100MW | IRENA 2024 |
+| BESS CAPEX | 4,000억/2GWh | BloombergNEF 2024 |
+| 그리드 배출계수 | 0.4594 tCO₂/MWh | 환경부 2024 |
+| K-ETS 탄소가격 | 25,000 ₩/tCO₂ | KRX 2024 |
+| SMP 기준가 | 80,000 ₩/MWh | KPX 2024 평균 |
+    """)
 
 
 if __name__ == "__main__":
