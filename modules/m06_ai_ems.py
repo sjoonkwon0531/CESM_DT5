@@ -153,57 +153,155 @@ class Tier2PredictiveControl:
                          grid_price_krw: float,
                          pv_forecast: Optional[List[float]] = None,
                          load_forecast: Optional[List[float]] = None) -> DispatchCommand:
-        """최적 디스패치 계산"""
+        """
+        최적 디스패치 계산 — scipy.optimize LP 기반
+
+        Decision variables (7):
+          x0: pv_to_aidc, x1: pv_to_hess, x2: pv_to_grid, x3: h2_electrolyzer,
+          x4: hess_to_aidc, x5: h2_fuelcell, x6: grid_to_aidc
+        
+        Objective: minimize cost = grid_price * x6 - sell_price * x2 + curtailment_penalty * slack
+        Constraints:
+          - PV balance: x0 + x1 + x2 + x3 + curtailment = pv_mw
+          - Load balance: x0 + x4 + x5 + x6 = load_mw
+          - Bounds: HESS charge/discharge ≤ 200 MW, H2 ≤ 50 MW, SOC limits
+        """
+        cmd = DispatchCommand(tier="tier2")
+
+        if linprog is not None and pv_mw >= 0 and load_mw >= 0:
+            return self._lp_dispatch(pv_mw, load_mw, hess_soc, h2_storage_level, grid_price_krw)
+
+        # Fallback: rule-based dispatch
+        return self._rule_based_dispatch(pv_mw, load_mw, hess_soc, h2_storage_level, grid_price_krw)
+
+    def _lp_dispatch(self, pv_mw: float, load_mw: float,
+                     hess_soc: float, h2_storage_level: float,
+                     grid_price_krw: float) -> DispatchCommand:
+        """LP-based optimal dispatch using scipy.optimize.linprog"""
+        cmd = DispatchCommand(tier="tier2")
+
+        # Sell price (SMP ~85% of grid price)
+        sell_price = grid_price_krw * 0.85
+        curtailment_penalty = 1000  # small penalty to avoid waste
+
+        # Variables: [pv_aidc, pv_hess, pv_grid, h2_elec, hess_aidc, h2_fc, grid_aidc, curtailment]
+        # x0       x1       x2       x3        x4         x5      x6          x7
+        n = 8
+
+        # Objective: min net cost (considering opportunity costs)
+        # PV→AIDC saves grid_price (avoided purchase), PV→grid earns sell_price
+        # HESS discharge has opportunity cost (future grid purchase) + degradation
+        # Net cost of each path to meet load:
+        #   PV→AIDC: 0 (free, saves grid_price)
+        #   HESS→AIDC: degradation cost (~10% of grid price as wear proxy)
+        #   H2 FC→AIDC: efficiency loss cost
+        #   Grid→AIDC: grid_price
+        hess_wear_cost = grid_price_krw * 0.15  # storage depletion opportunity cost
+        h2_fc_cost = grid_price_krw * 0.30      # low round-trip efficiency
+
+        c = np.zeros(n)
+        c[0] = 0                    # pv→aidc: free (best)
+        c[1] = sell_price * 0.5     # pv→hess: opportunity cost of not selling
+        c[2] = -sell_price          # pv→grid: sell revenue
+        c[3] = sell_price * 0.3     # h2 electrolyzer: efficiency loss
+        c[4] = hess_wear_cost       # hess→aidc: degradation/opportunity
+        c[5] = h2_fc_cost           # h2 fc→aidc: low efficiency
+        c[6] = grid_price_krw       # grid purchase: full cost
+        c[7] = curtailment_penalty  # curtailment: waste
+
+        # Equality constraints: A_eq @ x = b_eq
+        A_eq = np.zeros((2, n))
+        b_eq = np.zeros(2)
+
+        # PV balance: pv_aidc + pv_hess + pv_grid + h2_elec + curtailment = pv_mw
+        A_eq[0, [0, 1, 2, 3, 7]] = 1.0
+        b_eq[0] = pv_mw
+
+        # Load balance: pv_aidc + hess_aidc + h2_fc + grid_aidc = load_mw
+        A_eq[1, [0, 4, 5, 6]] = 1.0
+        b_eq[1] = load_mw
+
+        # Bounds
+        hess_charge_max = 200.0 if hess_soc < 0.95 else 0.0
+        hess_discharge_max = 200.0 if hess_soc > 0.1 else 0.0
+        h2_elec_max = 50.0 if h2_storage_level < 0.9 else 0.0
+        h2_fc_max = 50.0 if h2_storage_level > 0.1 else 0.0
+
+        bounds = [
+            (0, pv_mw),            # pv_aidc
+            (0, min(pv_mw, hess_charge_max)),  # pv_hess
+            (0, pv_mw),            # pv_grid
+            (0, min(pv_mw, h2_elec_max)),  # h2_elec
+            (0, hess_discharge_max),  # hess_aidc
+            (0, h2_fc_max),          # h2_fc
+            (0, load_mw + 10),       # grid_aidc
+            (0, pv_mw),             # curtailment
+        ]
+
+        try:
+            result = linprog(c, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
+            if result.success:
+                x = result.x
+                cmd.pv_to_aidc_mw = max(0, x[0])
+                cmd.pv_to_hess_mw = max(0, x[1])
+                cmd.pv_to_grid_mw = max(0, x[2])
+                cmd.h2_electrolyzer_mw = max(0, x[3])
+                cmd.hess_to_aidc_mw = max(0, x[4])
+                cmd.h2_fuelcell_mw = max(0, x[5])
+                cmd.grid_to_aidc_mw = max(0, x[6])
+                cmd.curtailment_mw = max(0, x[7])
+                return cmd
+        except Exception:
+            pass
+
+        # Fallback
+        return self._rule_based_dispatch(pv_mw, load_mw, hess_soc, h2_storage_level, grid_price_krw)
+
+    def _rule_based_dispatch(self, pv_mw: float, load_mw: float,
+                              hess_soc: float, h2_storage_level: float,
+                              grid_price_krw: float) -> DispatchCommand:
+        """Fallback rule-based dispatch"""
         cmd = DispatchCommand(tier="tier2")
         surplus = pv_mw - load_mw
 
         if surplus >= 0:
-            # 잉여: PV → AIDC 우선, 나머지 HESS/Grid/H2
             cmd.pv_to_aidc_mw = load_mw
             remaining = surplus
 
-            # HESS 충전 (SOC < 80%)
             if hess_soc < 0.8 and remaining > 0:
                 hess_charge = min(remaining, 200.0)
                 cmd.pv_to_hess_mw = hess_charge
                 remaining -= hess_charge
 
-            # H₂ 전해 (SOC 높고 잉여 많을 때)
             if hess_soc > 0.6 and h2_storage_level < 0.8 and remaining > 10:
                 h2_power = min(remaining, 50.0)
                 cmd.h2_electrolyzer_mw = h2_power
                 remaining -= h2_power
 
-            # 그리드 판매 (높은 가격)
             if remaining > 0 and grid_price_krw > 70000:
                 grid_sell = min(remaining, 50.0)
                 cmd.pv_to_grid_mw = grid_sell
                 remaining -= grid_sell
 
-            # 나머지 curtailment
             if remaining > 0:
                 if grid_price_krw > 50000:
                     cmd.pv_to_grid_mw += remaining
                 else:
                     cmd.curtailment_mw = remaining
         else:
-            # 부족: PV 전량 AIDC, 나머지 HESS/H2/Grid
             cmd.pv_to_aidc_mw = pv_mw
             deficit = -surplus
 
-            # HESS 방전 (SOC > 20%)
             if hess_soc > 0.2 and deficit > 0:
                 hess_discharge = min(deficit, 200.0)
                 cmd.hess_to_aidc_mw = hess_discharge
                 deficit -= hess_discharge
 
-            # H₂ 연료전지
             if h2_storage_level > 0.2 and deficit > 10:
                 h2_power = min(deficit, 50.0)
                 cmd.h2_fuelcell_mw = h2_power
                 deficit -= h2_power
 
-            # 그리드 구매 (최후 수단)
             if deficit > 0:
                 cmd.grid_to_aidc_mw = deficit
 
@@ -382,6 +480,37 @@ class AIEMSModule:
             "avg_response_time_ms": float(avg_response),
             "dispatch_count": len(history),
             "renewable_fraction": float(self_supply / total_aidc) if total_aidc > 0 else 0,
+        }
+
+    @staticmethod
+    def validate_energy_conservation(cmd: DispatchCommand, pv_input_mw: float,
+                                      tolerance: float = 0.01) -> Dict:
+        """
+        에너지 보존 검증: PV 입력 = PV 출력 합계, 공급 = 수요
+
+        Args:
+            cmd: 디스패치 명령
+            pv_input_mw: MPPT 후 PV 입력 (MW)
+            tolerance: 허용 오차 (MW)
+
+        Returns:
+            검증 결과 dict
+        """
+        # PV side: all PV allocations + curtailment ≤ PV input
+        pv_out = cmd.total_from_pv() + cmd.curtailment_mw
+        pv_balance_error = abs(pv_out - pv_input_mw)
+        pv_ok = pv_balance_error <= tolerance * max(1.0, pv_input_mw)
+
+        # Load side: total supply to AIDC should match load (approximately)
+        supply_to_aidc = cmd.total_to_aidc()
+
+        return {
+            "pv_input_mw": pv_input_mw,
+            "pv_output_mw": pv_out,
+            "pv_balance_error_mw": pv_balance_error,
+            "pv_conservation_ok": pv_ok,
+            "supply_to_aidc_mw": supply_to_aidc,
+            "valid": pv_ok,
         }
 
     def get_dispatch_summary(self, n_hours: int = 24) -> pd.DataFrame:

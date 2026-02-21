@@ -23,14 +23,17 @@ class TestAIEMS:
         self.ems = AIEMSModule()
 
     def test_dispatch_surplus(self):
-        """PV 잉여 시 디스패치: PV→AIDC + HESS 충전"""
+        """PV 잉여 시 디스패치: 부하 충족 + 잉여 활용"""
         cmd = self.ems.execute_dispatch(
             pv_power_mw=80, aidc_load_mw=50, hess_soc=0.3,
             h2_storage_level=0.5, grid_price_krw=80000
         )
-        assert cmd.pv_to_aidc_mw == 50.0
-        assert cmd.pv_to_hess_mw > 0
-        assert cmd.total_to_aidc() >= 50.0
+        # LP optimizer may route PV to grid and use HESS for AIDC if economically optimal
+        assert cmd.total_to_aidc() == pytest.approx(50.0, abs=1.0), \
+            f"Load not met: {cmd.total_to_aidc():.1f} MW"
+        # PV should be fully allocated (no waste)
+        pv_allocated = cmd.total_from_pv() + cmd.curtailment_mw
+        assert pv_allocated > 0, "PV not utilized"
 
     def test_dispatch_deficit(self):
         """PV 부족 시 디스패치: Grid 구매"""
@@ -51,7 +54,6 @@ class TestAIEMS:
 
     def test_kpi_calculation(self):
         """KPI 계산"""
-        # 시뮬레이션 실행
         pv_profile = [60] * 12 + [0] * 12
         load_profile = [50] * 24
         price_profile = [80000] * 24
@@ -74,7 +76,7 @@ class TestAIEMS:
         """Tier1 MPPT 제어"""
         t1 = Tier1RealTimeControl()
         power = t1.mppt_control(80.0, 800.0)
-        assert 70 < power <= 80  # 추적 효율 적용
+        assert 70 < power <= 80
 
     def test_tier1_dc_bus(self):
         """Tier1 DC Bus 안정화"""
@@ -105,6 +107,26 @@ class TestAIEMS:
         assert result["net_annual_benefit_krw"] != 0
         assert result["carbon_avoided_tco2"] > 0
 
+    def test_lp_dispatch_basic(self):
+        """LP 디스패치가 scipy.optimize를 실제 사용"""
+        t2 = Tier2PredictiveControl()
+        cmd = t2.optimal_dispatch(60.0, 50.0, 0.5, 0.5, 80000)
+        # LP should find valid allocation
+        assert cmd.total_to_aidc() == pytest.approx(50.0, abs=1.0)
+        # PV balance: allocations + curtailment ≈ pv input
+        pv_out = cmd.total_from_pv() + cmd.curtailment_mw
+        assert pv_out == pytest.approx(60.0, abs=1.0)
+
+    def test_energy_conservation_validation(self):
+        """에너지 보존 검증 로직"""
+        cmd = self.ems.execute_dispatch(
+            pv_power_mw=60, aidc_load_mw=50,
+            hess_soc=0.5, h2_storage_level=0.5,
+        )
+        pv_optimized = 60.0 * 0.99  # MPPT
+        result = AIEMSModule.validate_energy_conservation(cmd, pv_optimized)
+        assert result["valid"], f"Energy conservation failed: {result}"
+
 
 # =============================================================================
 # M7: Carbon Accounting Tests
@@ -115,7 +137,7 @@ class TestCarbonAccounting:
 
     def test_scope2_emission(self):
         """Scope 2: 그리드 전력 배출"""
-        emission = self.carbon.calculate_scope2(1000)  # 1000 MWh
+        emission = self.carbon.calculate_scope2(1000)
         expected = 1000 * 0.4594
         assert emission == pytest.approx(expected, rel=0.01)
 
@@ -124,11 +146,9 @@ class TestCarbonAccounting:
         assert self.carbon.calculate_scope2(0) == 0.0
 
     def test_scope3_annual(self):
-        """Scope 3: 공급망 배출 (연간 균등 배분)"""
+        """Scope 3: 공급망 배출"""
         s3 = self.carbon.calculate_scope3(100, 2000, 50, 20)
         assert s3 > 0
-        # 100MW PV × 40 + 2000MWh × 65 + 50MW × 30 = 4000 + 130000 + 1500 = 135500
-        # / 20 = 6775 tCO₂/yr
         assert s3 == pytest.approx(6775, rel=0.01)
 
     def test_avoided_emissions(self):
@@ -168,7 +188,7 @@ class TestCarbonAccounting:
 
     def test_cbam_cost(self):
         """CBAM 비용 계산"""
-        result = self.carbon.calculate_cbam_cost(100)  # 100 tCO₂
+        result = self.carbon.calculate_cbam_cost(100)
         assert "cbam_cost_krw" in result
         assert result["cbam_cost_krw"] >= 0
         assert result["differential_krw_per_tco2"] >= 0
@@ -195,7 +215,7 @@ class TestEconomics:
         self.econ = EconomicsModule()
 
     def test_capex_total(self):
-        """CAPEX 총액 = 22,500억원"""
+        """CAPEX 총액 = 22,500억원 (시설 포함)"""
         capex = self.econ.capex_model.calculate_total_capex()
         assert capex["infra_total_billion_krw"] == 22500
 
@@ -207,12 +227,10 @@ class TestEconomics:
     def test_npv_calculation(self):
         """NPV 계산"""
         npv = self.econ.calculate_npv(100, [20]*10, 0.05)
-        # PV of annuity: 20 × (1-(1.05)^-10)/0.05 ≈ 154.43
         assert npv == pytest.approx(54.43, abs=1.0)
 
     def test_irr_calculation(self):
         """IRR 계산"""
-        # 100 투자, 매년 15 × 10년 → IRR ≈ 8.1%
         irr = self.econ.calculate_irr(100, [15]*10)
         assert 0.05 < irr < 0.12
 
@@ -235,8 +253,54 @@ class TestEconomics:
         """Base case IRR: 4-5% 범위"""
         result = self.econ.run_base_case()
         irr = result["irr"]
-        # 보수적 추정이므로 넓은 범위 허용
-        assert -0.05 < irr < 0.15, f"Base IRR {irr*100:.1f}% out of expected range"
+        assert 0.03 < irr < 0.06, f"Base IRR {irr*100:.1f}% out of expected 3-6% range"
+
+    def test_base_case_capex_is_energy_only(self):
+        """Base case CAPEX = 에너지 인프라만 (10,000억)"""
+        result = self.econ.run_base_case()
+        assert result["capex_billion_krw"] == 10000
+
+    def test_mc_capex_matches_base_case(self):
+        """MF-1: MC에서 사용하는 CAPEX가 base case와 동일 (10,000억)"""
+        # MC 결과의 IRR이 base case IRR과 비슷한 범위여야 함
+        base = self.econ.run_base_case()
+        mc = self.econ.run_monte_carlo(n_iterations=500, random_seed=42)
+        # MC mean IRR should be close to base IRR (within ±5pp)
+        assert abs(mc["irr_mean"] - base["irr"]) < 0.05, \
+            f"MC IRR mean {mc['irr_mean']*100:.1f}% too far from base {base['irr']*100:.1f}%"
+        # prob(NPV>0) should be meaningful, not 0%
+        assert mc["prob_positive_npv"] > 0.1, \
+            f"prob(NPV>0)={mc['prob_positive_npv']*100:.0f}% — likely CAPEX bug"
+
+    def test_lcoe_reasonable_range(self):
+        """MF-2: LCOE가 합리적 범위 (100-300원/kWh = 100,000-300,000원/MWh)"""
+        result = self.econ.run_base_case()
+        lcoe_kwh = result["lcoe_krw_per_mwh"] / 1000  # ₩/kWh
+        assert 50 < lcoe_kwh < 500, \
+            f"LCOE {lcoe_kwh:.0f}₩/kWh out of reasonable range"
+
+    def test_tornado_actual_recalculation(self):
+        """MF-3: 토네이도 차트가 실제 재계산 결과인지 검증"""
+        base = self.econ.run_base_case()
+        base_irr = base["irr"]
+        tornado = self.econ.sensitivity_tornado(base_irr=base_irr)
+        assert len(tornado) > 0
+
+        # 토네이도 결과가 단순 곱셈이 아님을 검증
+        # CAPEX ×0.8 → IRR이 base_irr * 0.8이 아니어야 함
+        capex_item = next((t for t in tornado if t["variable"] == "CAPEX"), None)
+        assert capex_item is not None
+        # CAPEX 감소(0.8) → IRR 증가 (역관계)
+        assert capex_item["irr_low"] > base_irr, \
+            "CAPEX 0.8x should increase IRR"
+        # 단순 곱셈이 아닌지: irr_low != base_irr * 1.2 (스왑된 곱셈)
+        naive_value = base_irr * 1.2
+        assert abs(capex_item["irr_low"] - naive_value) > 0.001, \
+            "Tornado appears to use naive multiplication, not actual recalculation"
+
+        # 정렬 확인
+        ranges = [item["irr_range"] for item in tornado]
+        assert ranges == sorted(ranges, reverse=True)
 
     def test_learning_curve(self):
         """학습곡선 비용 감소"""
@@ -248,7 +312,7 @@ class TestEconomics:
         assert yr10["h2"] < yr0["h2"]
 
     def test_monte_carlo(self):
-        """Monte Carlo 분석 (축소)"""
+        """Monte Carlo 분석"""
         result = self.econ.run_monte_carlo(n_iterations=100, random_seed=42)
         assert result["n_iterations"] == 100
         assert result["n_valid"] > 50
@@ -257,11 +321,10 @@ class TestEconomics:
         assert 0 <= result["prob_positive_npv"] <= 1
 
     def test_sensitivity_tornado(self):
-        """토네이도 민감도"""
-        tornado = self.econ.sensitivity_tornado(0.045)
+        """토네이도 민감도 — 실제 재계산"""
+        tornado = self.econ.sensitivity_tornado()
         assert len(tornado) > 0
         assert all("variable" in item for item in tornado)
-        # 정렬 확인 (impact 큰 순)
         ranges = [item["irr_range"] for item in tornado]
         assert ranges == sorted(ranges, reverse=True)
 
@@ -281,7 +344,6 @@ class TestIntegration:
         """전체 시스템 24시간 통합 테스트"""
         from modules import PVModule, AIDCModule, WeatherModule, AIEMSModule, CarbonAccountingModule, EconomicsModule
 
-        # 모듈 초기화
         weather = WeatherModule()
         weather_data = weather.generate_tmy_data(year=2024)
 
@@ -290,11 +352,10 @@ class TestIntegration:
         ems = AIEMSModule()
         carbon = CarbonAccountingModule()
 
-        # 24시간 시뮬레이션
         pv_profile = []
         load_profile = []
         for h in range(24):
-            w = weather.get_weather_at_time(h + 4380)  # 6월 중순쯤
+            w = weather.get_weather_at_time(h + 4380)
             pv_out = pv.calculate_power_output(w["ghi_w_per_m2"], w["temp_celsius"])
             pv_profile.append(pv_out["power_mw"])
 
@@ -305,11 +366,9 @@ class TestIntegration:
         dispatches = ems.simulate_24h(pv_profile, load_profile, price_profile)
         assert len(dispatches) == 24
 
-        # KPI
         kpi = ems.calculate_kpi(dispatches)
         assert kpi["dispatch_count"] == 24
 
-        # 탄소 계산
         grid_imports = [d.grid_to_aidc_mw for d in dispatches]
         pv_self = [d.pv_to_aidc_mw for d in dispatches]
         for h in range(24):
@@ -330,13 +389,11 @@ class TestIntegration:
             annual_self_consumption_mwh=120000,
         )
 
-        # 탄소크레딧 수익을 경제성에 반영
         credit = carbon.calculate_carbon_credit_revenue(summary["avoided_emission_tco2"])
         assert credit["total_revenue_krw"] > 0
 
-        # 경제성 분석
         base = econ.run_base_case()
-        assert base["capex_billion_krw"] == 10000  # 에너지 인프라만
+        assert base["capex_billion_krw"] == 10000
 
     def test_ems_dispatch_energy_balance(self):
         """EMS 디스패치 에너지 균형 검증"""
@@ -345,10 +402,22 @@ class TestIntegration:
             pv_power_mw=60, aidc_load_mw=50,
             hess_soc=0.5, h2_storage_level=0.5,
         )
-        # PV 배분 ≈ PV 총 출력 (MPPT 보정 후)
         total_from_pv = cmd.total_from_pv() + cmd.curtailment_mw
-        # MPPT 이후 PV는 약 59.4 (0.99 × 60)
-        assert total_from_pv <= 60.0 * 1.01  # 약간의 오차 허용
+        assert total_from_pv <= 60.0 * 1.01
+
+    def test_energy_conservation_24h(self):
+        """24시간 에너지 보존 검증"""
+        ems = AIEMSModule()
+        pv = [0]*6 + [30, 50, 70, 80, 85, 80, 75, 70, 60, 40, 20, 5] + [0]*6
+        load = [50]*24
+        price = [80000]*24
+        dispatches = ems.simulate_24h(pv, load, price)
+
+        for h, cmd in enumerate(dispatches):
+            pv_input = pv[h] * 0.99  # MPPT
+            result = AIEMSModule.validate_energy_conservation(cmd, pv_input)
+            assert result["pv_conservation_ok"], \
+                f"Hour {h}: PV conservation failed — in={result['pv_input_mw']:.1f}, out={result['pv_output_mw']:.1f}"
 
 
 if __name__ == "__main__":

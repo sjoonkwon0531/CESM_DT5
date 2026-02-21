@@ -8,6 +8,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 import math
+import copy
 
 from config import ECONOMICS_CONFIG, CARBON_CONFIG
 
@@ -373,7 +374,10 @@ class EconomicsModule:
         payback = self.calculate_payback_period(capex_total, annual_cashflows)
 
         annual_opex_avg = np.mean([self.opex_model.calculate_annual_opex(capex_total, annual_grid_import_mwh, 1)["total_opex_billion_krw"]])
-        lcoe = self.calculate_lcoe(capex_total, annual_opex_avg, annual_pv_generation_mwh)
+        # LCOE: 총 에너지 시스템 비용 / 총 에너지 공급량 (PV + Grid)
+        # PV 발전량만으로 나누면 BESS/H2/DC Bus 비용이 과대 할당됨
+        total_energy_supply_mwh = annual_pv_generation_mwh + annual_grid_import_mwh
+        lcoe = self.calculate_lcoe(capex_total, annual_opex_avg, total_energy_supply_mwh)
 
         return {
             "capex_billion_krw": capex_total,
@@ -487,8 +491,12 @@ class EconomicsModule:
             # 할인율 변동
             discount_rate = self.config["discount_rate"] * discount_factor
 
-            # CAPEX (고정)
-            capex = self.capex_model.calculate_total_capex()["infra_total_billion_krw"]
+            # CAPEX: 에너지 인프라만 (base case와 동일, 시설비 제외)
+            c_cfg = self.config
+            capex = (c_cfg["capex_pv_billion_krw"] + c_cfg["capex_bess_billion_krw"] +
+                     c_cfg["capex_supercap_billion_krw"] + c_cfg["capex_h2_billion_krw"] +
+                     c_cfg["capex_dcbus_billion_krw"] + c_cfg["capex_grid_billion_krw"] +
+                     c_cfg["capex_aiems_billion_krw"])
 
             # 연간 현금흐름 (간소화)
             ef = CARBON_CONFIG.get("grid_emission_factor_tco2_per_mwh", 0.4594)
@@ -553,18 +561,30 @@ class EconomicsModule:
             "npv_distribution": _to_list(npv_valid),
         }
 
+    def _get_energy_capex(self, config: Dict) -> float:
+        """에너지 인프라 CAPEX 합산 (시설비 제외)"""
+        return (config["capex_pv_billion_krw"] + config["capex_bess_billion_krw"] +
+                config["capex_supercap_billion_krw"] + config["capex_h2_billion_krw"] +
+                config["capex_dcbus_billion_krw"] + config["capex_grid_billion_krw"] +
+                config["capex_aiems_billion_krw"])
+
     def sensitivity_tornado(self,
-                            base_irr: float,
-                            variables: Optional[Dict[str, Tuple[float, float]]] = None) -> List[Dict]:
+                            base_irr: float = None,
+                            variables: Optional[Dict[str, Tuple[float, float]]] = None,
+                            base_case_kwargs: Optional[Dict] = None) -> List[Dict]:
         """
-        토네이도 차트용 민감도 분석
+        토네이도 차트용 민감도 분석 — 실제 재계산 기반
+
+        각 변수를 low/high로 변경한 뒤 run_base_case()를 재실행하여
+        실제 IRR 변화를 구합니다.
 
         Args:
-            base_irr: 기본 IRR
+            base_irr: 기본 IRR (None이면 자동 계산)
             variables: {변수명: (하한 배율, 상한 배율)}
+            base_case_kwargs: run_base_case에 전달할 추가 인자
 
         Returns:
-            변수별 IRR 변동
+            변수별 IRR 변동 (실제 재계산)
         """
         if variables is None:
             variables = {
@@ -576,25 +596,73 @@ class EconomicsModule:
                 "부하변동": (0.9, 1.1),
             }
 
+        bc_kwargs = base_case_kwargs or {}
+
+        # 변수명 → config key 매핑
+        var_to_config = {
+            "전력가격": ["revenue_electricity_saving_krw_per_mwh", "revenue_surplus_sale_krw_per_mwh"],
+            "탄소가격": ["revenue_carbon_credit_krw_per_tco2"],
+            "PV효율": None,  # PV 발전량 조정
+            "할인율": ["discount_rate"],
+            "CAPEX": ["capex_pv_billion_krw", "capex_bess_billion_krw", "capex_supercap_billion_krw",
+                       "capex_h2_billion_krw", "capex_dcbus_billion_krw", "capex_grid_billion_krw",
+                       "capex_aiems_billion_krw"],
+            "부하변동": None,  # AIDC 부하량 조정
+        }
+
+        # Base case IRR
+        if base_irr is None:
+            base_result = self.run_base_case(**bc_kwargs)
+            base_irr = base_result["irr"]
+
+        saved_config = copy.deepcopy(self.config)
+
         results = []
         for var_name, (low_factor, high_factor) in variables.items():
-            # 하한 케이스 IRR
-            irr_low = base_irr * low_factor
-            # 상한 케이스 IRR
-            irr_high = base_irr * high_factor
+            irr_cases = {}
+            for case_name, factor in [("low", low_factor), ("high", high_factor)]:
+                # 복원 config
+                self.config = copy.deepcopy(saved_config)
+                self.capex_model = CAPEXModel(self.config)
+                self.opex_model = OPEXModel(self.config)
+                self.revenue_model = RevenueModel(self.config)
 
-            # CAPEX의 경우 역관계 (비용 ↑ → IRR ↓)
-            if var_name in ["CAPEX", "할인율"]:
-                irr_low, irr_high = irr_high, irr_low
+                kwargs = dict(bc_kwargs)
+
+                config_keys = var_to_config.get(var_name)
+                if config_keys is not None:
+                    for key in config_keys:
+                        self.config[key] = saved_config[key] * factor
+                elif var_name == "PV효율":
+                    base_pv = kwargs.get("annual_pv_generation_mwh", 150000.0)
+                    kwargs["annual_pv_generation_mwh"] = base_pv * factor
+                elif var_name == "부하변동":
+                    base_load = kwargs.get("annual_aidc_consumption_mwh", 700000.0)
+                    kwargs["annual_aidc_consumption_mwh"] = base_load * factor
+                    base_grid = kwargs.get("annual_grid_import_mwh", 550000.0)
+                    kwargs["annual_grid_import_mwh"] = base_grid * factor
+
+                # 재계산
+                self.capex_model = CAPEXModel(self.config)
+                self.opex_model = OPEXModel(self.config)
+                self.revenue_model = RevenueModel(self.config)
+                case_result = self.run_base_case(**kwargs)
+                irr_cases[case_name] = case_result["irr"]
 
             results.append({
                 "variable": var_name,
                 "low_factor": low_factor,
                 "high_factor": high_factor,
-                "irr_low": irr_low,
-                "irr_high": irr_high,
-                "irr_range": abs(irr_high - irr_low),
+                "irr_low": irr_cases["low"],
+                "irr_high": irr_cases["high"],
+                "irr_range": abs(irr_cases["high"] - irr_cases["low"]),
             })
+
+        # 복원
+        self.config = saved_config
+        self.capex_model = CAPEXModel(self.config)
+        self.opex_model = OPEXModel(self.config)
+        self.revenue_model = RevenueModel(self.config)
 
         results.sort(key=lambda x: x["irr_range"], reverse=True)
         return results
