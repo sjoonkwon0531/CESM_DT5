@@ -318,6 +318,11 @@ UI_CONFIG = {
 
 # 색상 팔레트 (Plotly 차트용)
 COLOR_PALETTE = {
+    "carbon": "#2E8B57",  # 시그린 (탄소)
+    "scope1": "#FF6347",  # 토마토 (Scope 1)
+    "scope2": "#4682B4",  # 스틸블루 (Scope 2)
+    "scope3": "#DDA0DD",  # 플럼 (Scope 3)
+    "economics": "#DAA520",  # 골든로드 (경제)
     "pv": "#FFD700",      # 골드 (태양광)
     "aidc": "#DC143C",    # 빨강 (부하)
     "bess": "#32CD32",    # 라임그린 (배터리)
@@ -325,4 +330,103 @@ COLOR_PALETTE = {
     "h2": "#00CED1",      # 다크터쿼이즈 (수소)
     "surplus": "#90EE90", # 연한 녹색 (잉여)
     "deficit": "#FFB6C1"  # 연한 빨강 (부족)
+}
+
+# =============================================================================
+# M6. AI-EMS 제어 설정
+# =============================================================================
+AI_EMS_CONFIG = {
+    # Tier 1: 실시간 제어
+    "tier1_interval_ms": 1,
+    "mppt_tracking_speed": 0.99,       # MPPT 추적 속도
+    "dc_bus_voltage_target_v": 380,
+    "dc_bus_voltage_tolerance_pct": 2,  # ±2%
+    "hess_soc_target": {"supercap": 0.5, "bess": 0.5},
+
+    # Tier 2: 예측 제어
+    "tier2_interval_min": 15,
+    "pv_forecast_horizon_hr": 4,
+    "load_forecast_horizon_hr": 4,
+    "dispatch_optimization": True,
+
+    # Tier 3: 전략 최적화
+    "tier3_interval_hr": 1,
+    "economic_optimization": True,
+    "grid_trading_enabled": True,
+    "maintenance_scheduling": True,
+}
+
+# =============================================================================
+# M7. 탄소 회계 설정
+# =============================================================================
+CARBON_CONFIG = {
+    # 한국 전력 배출계수 (tCO₂/MWh)
+    "grid_emission_factor_tco2_per_mwh": 0.4594,   # 2024 기준
+    "grid_emission_factor_year": 2024,
+
+    # K-ETS 탄소 가격 (₩/tCO₂)
+    "k_ets_price_krw_per_tco2": 25000,
+
+    # CBAM (EU Carbon Border Adjustment Mechanism)
+    "cbam_price_eur_per_tco2": 80,
+    "eur_to_krw": 1450,
+
+    # Scope 3 기본 배출계수 (tCO₂/MW 설비)
+    "scope3_pv_manufacturing_tco2_per_mw": 40,
+    "scope3_bess_manufacturing_tco2_per_mwh": 65,
+    "scope3_h2_manufacturing_tco2_per_mw": 30,
+
+    # 탄소크레딧 (REC과 별도)
+    "carbon_credit_price_krw_per_tco2": 25000,
+}
+
+# =============================================================================
+# M9. 경제 최적화 설정
+# =============================================================================
+ECONOMICS_CONFIG = {
+    # 프로젝트 기본
+    "project_lifetime_years": 20,
+    "discount_rate": 0.05,
+    "inflation_rate": 0.02,
+
+    # CAPEX (억원) — 100MW AIDC 기준
+    "capex_pv_billion_krw": 1500,           # PV 100MW
+    "capex_bess_billion_krw": 4000,         # BESS 2GWh
+    "capex_supercap_billion_krw": 500,      # Supercap
+    "capex_h2_billion_krw": 3000,           # H₂ system (SOEC+SOFC+저장)
+    "capex_dcbus_billion_krw": 500,         # DC Bus + 변환기
+    "capex_grid_billion_krw": 200,          # 계통 연계
+    "capex_aiems_billion_krw": 300,         # AI-EMS 시스템
+    "capex_facility_billion_krw": 12500,    # AIDC 건축/인프라
+    "capex_total_infra_billion_krw": 22500, # 인프라 총계
+    "capex_rd_billion_krw": 400,            # R&D 과제비 (분리)
+
+    # OPEX (억원/년)
+    "opex_maintenance_pct_of_capex": 0.008,  # 에너지 설비 CAPEX 대비 0.8%
+    "opex_maintenance_capex_base_billion_krw": 10000,  # 유지보수 대상 설비 CAPEX (에너지 인프라)
+    "opex_electricity_krw_per_mwh": 80000,   # 전력 단가
+    "opex_labor_billion_krw_per_year": 50,   # 인건비
+    "opex_insurance_pct": 0.002,             # 보험 0.2%
+
+    # 수익 모델
+    "revenue_electricity_saving_krw_per_mwh": 80000,  # 자가소비 절감
+    "revenue_surplus_sale_krw_per_mwh": 70000,        # 잉여 판매 (SMP)
+    "revenue_rec_krw_per_mwh": 25000,                 # REC
+    "revenue_rec_multiplier": 1.2,                     # 태양광 가중치
+    "revenue_carbon_credit_krw_per_tco2": 25000,
+
+    # 학습곡선 (연간 비용 감소율)
+    "learning_curve_pv_pct_per_yr": -7,
+    "learning_curve_bess_pct_per_yr": -10,
+    "learning_curve_h2_pct_per_yr": -8,
+
+    # Monte Carlo
+    "mc_iterations": 10000,
+    "mc_variables": {
+        "pv_efficiency_std_pct": 5,
+        "electricity_price_std_pct": 15,
+        "carbon_price_std_pct": 20,
+        "discount_rate_std_pct": 10,
+        "load_variation_std_pct": 10,
+    },
 }

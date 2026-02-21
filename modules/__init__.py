@@ -1,7 +1,7 @@
 """
 CEMS-DT Modules Package
 각 시스템 컴포넌트를 모듈화
-Week 1 Core + Week 2 Extensions
+Week 1 Core + Week 2 Extensions + Week 3 Intelligence
 """
 
 # Week 1 Core Modules
@@ -15,6 +15,11 @@ from .m02_hess import HESSModule
 from .m05_h2 import H2SystemModule
 from .m08_grid import GridInterfaceModule
 
+# Week 3 Intelligence Modules
+from .m06_ai_ems import AIEMSModule
+from .m07_carbon import CarbonAccountingModule
+from .m09_economics import EconomicsModule
+
 __all__ = [
     # Week 1
     'PVModule',
@@ -24,5 +29,9 @@ __all__ = [
     # Week 2  
     'HESSModule',
     'H2SystemModule',
-    'GridInterfaceModule'
+    'GridInterfaceModule',
+    # Week 3
+    'AIEMSModule',
+    'CarbonAccountingModule',
+    'EconomicsModule',
 ]

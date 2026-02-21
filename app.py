@@ -28,12 +28,14 @@ def _safe_dict(d):
 # 모듈 임포트
 from modules import (
     PVModule, AIDCModule, DCBusModule, WeatherModule,
-    HESSModule, H2SystemModule, GridInterfaceModule
+    HESSModule, H2SystemModule, GridInterfaceModule,
+    AIEMSModule, CarbonAccountingModule, EconomicsModule
 )
 from config import (
     PV_TYPES, GPU_TYPES, PUE_TIERS, WORKLOAD_TYPES, 
     CONVERTER_EFFICIENCY, UI_CONFIG, COLOR_PALETTE,
-    HESS_LAYER_CONFIGS, H2_SYSTEM_CONFIG, GRID_TARIFF_CONFIG
+    HESS_LAYER_CONFIGS, H2_SYSTEM_CONFIG, GRID_TARIFF_CONFIG,
+    AI_EMS_CONFIG, CARBON_CONFIG, ECONOMICS_CONFIG
 )
 
 # Streamlit 페이지 설정
@@ -150,6 +152,21 @@ def create_main_dashboard():
             key="grid_capacity"
         )
         
+        # Week 3: 경제/탄소 파라미터
+        st.subheader("💰 M9. 경제/탄소")
+        carbon_price = st.slider(
+            "탄소가격 (₩/tCO₂)", 10000, 100000, 25000, 5000, key="carbon_price"
+        )
+        discount_rate = st.slider(
+            "할인율 (%)", 1.0, 15.0, 5.0, 0.5, key="discount_rate"
+        )
+        electricity_price = st.slider(
+            "전력단가 (₩/MWh)", 50000, 150000, 80000, 5000, key="elec_price"
+        )
+        learning_curve_on = st.checkbox(
+            "학습곡선 적용", value=False, key="learning_curve"
+        )
+
         # 시뮬레이션 설정
         st.subheader("⚙️ 시뮬레이션")
         sim_hours = st.selectbox(
@@ -293,6 +310,42 @@ def run_simulation():
                 h2_fuelcell_mw=30
             )
             
+            # Week 3: AI-EMS 디스패치
+            ems = AIEMSModule()
+            ems_dispatches = []
+            ems_soc = 0.5
+            ems_h2 = 0.5
+            for i in range(min(sim_hours, len(pv_data))):
+                pv_mw = pv_data.iloc[i]['power_mw']
+                aidc_mw = aidc_data.iloc[i]['total_power_mw']
+                hour = i % 24
+                cmd = ems.execute_dispatch(
+                    pv_power_mw=pv_mw, aidc_load_mw=aidc_mw,
+                    hess_soc=ems_soc, h2_storage_level=ems_h2,
+                    grid_price_krw=st.session_state.get('elec_price', 80000),
+                    hour_of_day=hour,
+                )
+                ems_dispatches.append(cmd.to_dict())
+                ems_soc = float(np.clip(ems_soc + (cmd.pv_to_hess_mw - cmd.hess_to_aidc_mw) / 2000, 0, 1))
+                ems_h2 = float(np.clip(ems_h2 + (cmd.h2_electrolyzer_mw - cmd.h2_fuelcell_mw) / 5000, 0, 1))
+            ems_df = pd.DataFrame(ems_dispatches)
+            ems_kpi = ems.calculate_kpi()
+
+            # Week 3: 탄소 회계
+            carbon = CarbonAccountingModule(
+                k_ets_price=st.session_state.get('carbon_price', 25000)
+            )
+            carbon_records = []
+            for i in range(min(sim_hours, len(pv_data))):
+                grid_mwh = ems_dispatches[i]['grid_to_aidc_mw']
+                pv_self_mwh = ems_dispatches[i]['pv_to_aidc_mw']
+                rec = carbon.calculate_hourly_emissions(grid_mwh, pv_self_mwh, hour=i)
+                carbon_records.append(rec.to_dict())
+            carbon_df = pd.DataFrame(carbon_records)
+
+            # Week 3: 경제성
+            economics = EconomicsModule()
+
             # 결과 통합
             simulation_result = {
                 'weather': weather_subset,
@@ -302,9 +355,13 @@ def run_simulation():
                 'hess': hess_df,
                 'h2': h2_df,
                 'grid': grid_df,
+                'ems_df': ems_df,
+                'ems_kpi': ems_kpi,
+                'carbon_df': carbon_df,
                 'modules': {
                     'pv': pv, 'aidc': aidc, 'dcbus': dcbus,
-                    'hess': hess, 'h2': h2_system, 'grid': grid
+                    'hess': hess, 'h2': h2_system, 'grid': grid,
+                    'ems': ems, 'carbon': carbon, 'economics': economics
                 }
             }
             
@@ -320,9 +377,10 @@ def display_results():
     data = st.session_state.simulation_data
     
     # 탭 구성
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
         "📊 전력 균형", "☀️ PV 발전", "🖥️ AIDC 부하", 
-        "🔄 DC Bus", "🔋 HESS", "⚡ H₂ 시스템", "🔌 그리드", "📈 통계 분석"
+        "🔄 DC Bus", "🔋 HESS", "⚡ H₂ 시스템", "🔌 그리드",
+        "🤖 AI-EMS", "🌍 탄소 회계", "💰 경제성", "📈 통계 분석"
     ])
     
     with tab1:
@@ -347,6 +405,15 @@ def display_results():
         display_grid_results(data)
     
     with tab8:
+        display_ems_results(data)
+    
+    with tab9:
+        display_carbon_results(data)
+    
+    with tab10:
+        display_economics_results(data)
+    
+    with tab11:
         display_statistics(data)
 
 
@@ -759,7 +826,251 @@ def display_dcbus_results(data):
         )
 
 
-def display_statistics(data):
+def display_ems_results(data):
+    """AI-EMS 결과 표시"""
+    st.subheader("🤖 AI-EMS 디스패치")
+    
+    if 'ems_df' not in data or data['ems_df'].empty:
+        st.warning("AI-EMS 데이터가 없습니다.")
+        return
+    
+    ems_df = data['ems_df']
+    kpi = data.get('ems_kpi', {})
+    
+    # KPI 메트릭
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("자급률", f"{kpi.get('self_sufficiency_ratio', 0):.1%}")
+    with col2:
+        st.metric("피크 감축률", f"{kpi.get('peak_reduction_ratio', 0):.1%}")
+    with col3:
+        st.metric("재생에너지 비율", f"{kpi.get('renewable_fraction', 0):.1%}")
+    with col4:
+        st.metric("평균 응답시간", f"{kpi.get('avg_response_time_ms', 0):.2f} ms")
+    
+    # 디스패치 Stacked Bar
+    hours = list(range(len(ems_df)))
+    fig = go.Figure()
+    
+    for col_name, label, color in [
+        ('pv_to_aidc_mw', 'PV→AIDC', COLOR_PALETTE['pv']),
+        ('hess_to_aidc_mw', 'HESS→AIDC', COLOR_PALETTE['bess']),
+        ('grid_to_aidc_mw', 'Grid→AIDC', COLOR_PALETTE['grid']),
+        ('h2_fuelcell_mw', 'H₂→AIDC', COLOR_PALETTE['h2']),
+    ]:
+        if col_name in ems_df.columns:
+            fig.add_trace(go.Bar(
+                x=hours, y=ems_df[col_name].tolist(),
+                name=label, marker_color=color,
+            ))
+    
+    fig.update_layout(
+        barmode='stack', height=450,
+        title="AIDC 공급원 구성 (Stacked)",
+        xaxis_title="시간", yaxis_title="전력 (MW)"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # 잉여 전력 배분
+    fig2 = go.Figure()
+    for col_name, label, color in [
+        ('pv_to_hess_mw', 'PV→HESS', COLOR_PALETTE['bess']),
+        ('pv_to_grid_mw', 'PV→Grid', COLOR_PALETTE['grid']),
+        ('h2_electrolyzer_mw', 'PV→H₂', COLOR_PALETTE['h2']),
+        ('curtailment_mw', 'Curtailment', '#999999'),
+    ]:
+        if col_name in ems_df.columns:
+            fig2.add_trace(go.Bar(
+                x=hours, y=ems_df[col_name].tolist(),
+                name=label, marker_color=color,
+            ))
+    fig2.update_layout(
+        barmode='stack', height=350,
+        title="잉여 전력 배분",
+        xaxis_title="시간", yaxis_title="전력 (MW)"
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+
+
+def display_carbon_results(data):
+    """탄소 회계 결과 표시"""
+    st.subheader("🌍 탄소 배출 대시보드")
+    
+    if 'carbon_df' not in data or data['carbon_df'].empty:
+        st.warning("탄소 데이터가 없습니다.")
+        return
+    
+    carbon_df = data['carbon_df']
+    carbon_module = data['modules'].get('carbon')
+    
+    # 총 배출 요약
+    total_s1 = carbon_df['scope1_tco2'].sum()
+    total_s2 = carbon_df['scope2_tco2'].sum()
+    total_s3 = carbon_df['scope3_tco2'].sum()
+    total_avoided = carbon_df['avoided_tco2'].sum()
+    total_net = carbon_df['net_tco2'].sum()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Scope 2 배출", f"{total_s2:.1f} tCO₂")
+    with col2:
+        st.metric("Scope 3 배출", f"{total_s3:.1f} tCO₂")
+    with col3:
+        st.metric("회피 배출", f"{total_avoided:.1f} tCO₂", delta=f"-{total_avoided:.0f}")
+    with col4:
+        st.metric("순 배출", f"{total_net:.1f} tCO₂")
+    
+    # Scope 파이차트
+    col1, col2 = st.columns(2)
+    with col1:
+        fig_pie = px.pie(
+            values=[total_s1, total_s2, total_s3],
+            names=['Scope 1 (직접)', 'Scope 2 (전력)', 'Scope 3 (공급망)'],
+            title="배출 구성 (Scope 1/2/3)",
+            color_discrete_sequence=[COLOR_PALETTE['scope1'], COLOR_PALETTE['scope2'], COLOR_PALETTE['scope3']]
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+    
+    with col2:
+        # 시계열
+        fig_ts = go.Figure()
+        hours = list(range(len(carbon_df)))
+        fig_ts.add_trace(go.Scatter(
+            x=hours, y=carbon_df['scope2_tco2'].cumsum().tolist(),
+            name='누적 Scope 2', fill='tozeroy',
+            line=dict(color=COLOR_PALETTE['scope2'])
+        ))
+        fig_ts.add_trace(go.Scatter(
+            x=hours, y=carbon_df['avoided_tco2'].cumsum().tolist(),
+            name='누적 회피', fill='tozeroy',
+            line=dict(color=COLOR_PALETTE['carbon'])
+        ))
+        fig_ts.update_layout(title="누적 탄소 배출/회피", height=400,
+                             xaxis_title="시간", yaxis_title="tCO₂")
+        st.plotly_chart(fig_ts, use_container_width=True)
+    
+    # K-ETS / CBAM 분석
+    if carbon_module:
+        st.subheader("K-ETS & CBAM 시나리오")
+        col1, col2 = st.columns(2)
+        with col1:
+            kets = carbon_module.calculate_k_ets_cost_or_revenue(total_net, baseline_tco2=total_s2 * 0.9)
+            if kets["status"] == "credit_available":
+                st.success(f"탄소크레딧 판매 가능: {kets['surplus_tco2']:.0f} tCO₂ → {kets['revenue_krw']:,.0f}₩")
+            else:
+                st.warning(f"배출권 구매 필요: {kets['excess_tco2']:.0f} tCO₂ → {kets['cost_krw']:,.0f}₩")
+        with col2:
+            cbam = carbon_module.calculate_cbam_cost(100)
+            st.info(f"CBAM 예시 (100 tCO₂ 수출): {cbam['cbam_cost_krw']:,.0f}₩ ({cbam['cbam_cost_eur']:,.0f}€)")
+
+
+def display_economics_results(data):
+    """경제성 대시보드"""
+    st.subheader("💰 경제성 분석")
+    
+    econ = data['modules'].get('economics')
+    if not econ:
+        st.warning("경제성 모듈이 없습니다.")
+        return
+    
+    # Base case
+    with st.spinner("경제성 분석 중..."):
+        base = econ.run_base_case()
+    
+    # 헤드라인 메트릭
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("CAPEX", f"{base['capex_billion_krw']:,.0f}억원")
+    with col2:
+        st.metric("IRR", f"{base['irr_pct']:.1f}%")
+    with col3:
+        st.metric("NPV", f"{base['npv_billion_krw']:,.0f}억원")
+    with col4:
+        st.metric("회수기간", f"{base['payback_years']:.1f}년")
+    
+    # CAPEX 구성
+    col1, col2 = st.columns(2)
+    with col1:
+        items = base['capex_breakdown']
+        fig_capex = px.pie(
+            values=list(items.values()),
+            names=list(items.keys()),
+            title="CAPEX 구성",
+        )
+        st.plotly_chart(fig_capex, use_container_width=True)
+    
+    with col2:
+        # 연간 현금흐름
+        cfs = base['annual_cashflows']
+        cumulative = np.cumsum(cfs).tolist()
+        fig_cf = go.Figure()
+        fig_cf.add_trace(go.Bar(
+            x=list(range(1, len(cfs)+1)), y=cfs,
+            name='연간 순현금흐름', marker_color=COLOR_PALETTE['economics']
+        ))
+        fig_cf.add_trace(go.Scatter(
+            x=list(range(1, len(cumulative)+1)), y=cumulative,
+            name='누적', line=dict(color='red')
+        ))
+        fig_cf.add_hline(y=base['capex_billion_krw'], line_dash="dash", line_color="gray",
+                         annotation_text="CAPEX")
+        fig_cf.update_layout(title="연간 현금흐름 (억원)", height=400,
+                             xaxis_title="연차", yaxis_title="억원")
+        st.plotly_chart(fig_cf, use_container_width=True)
+    
+    # Monte Carlo
+    st.subheader("📊 Monte Carlo 민감도 분석")
+    mc_iterations = st.selectbox("MC 반복 횟수", [100, 1000, 5000, 10000], index=1)
+    
+    if st.button("Monte Carlo 실행"):
+        with st.spinner(f"Monte Carlo {mc_iterations}회 실행 중..."):
+            mc = econ.run_monte_carlo(n_iterations=mc_iterations)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("IRR 평균", f"{mc['irr_mean']*100:.1f}%")
+            st.metric("IRR 범위 (5-95%)", f"{mc['irr_p5']*100:.1f}% ~ {mc['irr_p95']*100:.1f}%")
+            st.metric("NPV>0 확률", f"{mc['prob_positive_npv']*100:.1f}%")
+        
+        with col2:
+            # IRR 히스토그램
+            fig_hist = px.histogram(
+                x=[x*100 for x in mc['irr_distribution']],
+                nbins=50, title="IRR 분포",
+                labels={'x': 'IRR (%)', 'y': '빈도'}
+            )
+            fig_hist.add_vline(x=mc['irr_mean']*100, line_dash="dash", line_color="red",
+                              annotation_text=f"평균 {mc['irr_mean']*100:.1f}%")
+            st.plotly_chart(fig_hist, use_container_width=True)
+    
+    # 토네이도 차트
+    st.subheader("🌪️ 민감도 토네이도")
+    tornado = econ.sensitivity_tornado(base['irr'])
+    
+    fig_tornado = go.Figure()
+    for item in reversed(tornado):
+        fig_tornado.add_trace(go.Bar(
+            y=[item['variable']], x=[item['irr_high']*100 - base['irr_pct']],
+            orientation='h', name=f"{item['variable']} (상)", marker_color='green',
+            showlegend=False
+        ))
+        fig_tornado.add_trace(go.Bar(
+            y=[item['variable']], x=[item['irr_low']*100 - base['irr_pct']],
+            orientation='h', name=f"{item['variable']} (하)", marker_color='red',
+            showlegend=False
+        ))
+    fig_tornado.update_layout(
+        title=f"IRR 민감도 (Base: {base['irr_pct']:.1f}%)",
+        xaxis_title="IRR 변동 (%p)", barmode='overlay', height=400
+    )
+    st.plotly_chart(fig_tornado, use_container_width=True)
+    
+    # 과장 금지 경고
+    report = econ.get_summary_report(base)
+    st.info(report["confidence_note"])
+
+
+
     """통계 분석 표시"""
     st.subheader("📈 종합 통계 분석")
     
