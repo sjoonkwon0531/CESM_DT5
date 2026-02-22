@@ -52,119 +52,115 @@ if 'simulation_data' not in st.session_state:
 if 'weather_data' not in st.session_state:
     st.session_state.weather_data = None
 
-# 다크 네온 테마 CSS 적용
+# GDI 스타일 다크 테마 CSS 적용
 st.markdown("""
 <style>
-    /* 메인 배경 */
+    /* 메인 배경 - 딥 네이비 그라데이션 */
     .stApp {
-        background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
-        color: #ffffff;
+        background: linear-gradient(135deg, #0f0f2e 0%, #1a1a3e 100%);
+        color: #e0e0f0;
     }
     
-    /* 사이드바 스타일링 */
+    /* 사이드바 스타일링 - 딥 네이비 */
     .css-1d391kg {
-        background-color: #0f0f23 !important;
+        background-color: #12122e !important;
     }
     .css-12w0qpk {
-        background-color: #0f0f23 !important;
+        background-color: #12122e !important;
     }
     
-    /* 메트릭 카드 글로우 효과 */
+    /* 메트릭 카드 - 절제된 스타일 */
     [data-testid="metric-container"] {
-        background: rgba(26, 26, 46, 0.8);
-        border: 1px solid #00f0ff;
+        background: rgba(30, 30, 63, 0.8);
+        border: 1px solid rgba(100, 100, 255, 0.1);
         border-radius: 10px;
         padding: 1rem;
-        box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+        box-shadow: 0 4px 12px rgba(0, 212, 255, 0.1);
     }
     
-    /* 메트릭 값 네온 효과 */
+    /* 메트릭 값 - 밝은 시안 */
     [data-testid="metric-container"] > div:first-child {
-        color: #00f0ff !important;
-        text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        color: #00d4ff !important;
         font-weight: bold;
     }
     
     /* 탭 스타일링 */
     .stTabs [data-baseweb="tab-list"] {
-        background-color: rgba(26, 26, 46, 0.8);
+        background-color: rgba(37, 37, 80, 0.6);
         border-radius: 10px;
     }
     
     .stTabs [data-baseweb="tab"] {
-        color: #ffffff;
+        color: #c0c0d0;
         border-radius: 8px;
     }
     
     .stTabs [data-baseweb="tab"]:hover {
-        background-color: rgba(0, 240, 255, 0.1);
-        box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+        background-color: rgba(0, 212, 255, 0.1);
     }
     
     .stTabs [aria-selected="true"] {
-        background-color: rgba(0, 240, 255, 0.2) !important;
-        color: #00f0ff !important;
-        box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+        background-color: rgba(0, 212, 255, 0.15) !important;
+        color: #00d4ff !important;
+        border-bottom: 2px solid #00d4ff;
     }
     
-    /* 슬라이더 네온 스타일 */
+    /* 슬라이더 - 시안/라벤더 계열 */
     .stSlider > div > div > div > div {
-        background: linear-gradient(90deg, #ff00ff, #00f0ff);
+        background: linear-gradient(90deg, #00d4ff, #a78bfa);
     }
     
-    /* 버튼 네온 효과 */
+    /* 버튼 - 절제된 스타일 */
     .stButton > button {
-        background: linear-gradient(45deg, #00f0ff, #ff00ff);
+        background: linear-gradient(45deg, #00d4ff, #a78bfa);
         border: none;
         border-radius: 8px;
         color: white;
         font-weight: bold;
-        box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+        box-shadow: 0 2px 8px rgba(0, 212, 255, 0.2);
         transition: all 0.3s ease;
     }
     
     .stButton > button:hover {
-        box-shadow: 0 0 25px rgba(255, 0, 255, 0.6);
-        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(167, 139, 250, 0.3);
+        transform: translateY(-1px);
     }
     
     /* 선택박스 스타일 */
     .stSelectbox > div > div {
-        background-color: rgba(26, 26, 46, 0.8);
-        border: 1px solid #00f0ff;
+        background-color: rgba(30, 30, 63, 0.8);
+        border: 1px solid rgba(100, 100, 255, 0.1);
         border-radius: 8px;
-        color: #ffffff;
+        color: #e0e0f0;
     }
     
-    /* 제목 네온 효과 */
+    /* 제목 - 연한 그레이 */
     h1, h2, h3 {
-        color: #ffffff !important;
-        text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        color: #e0e0f0 !important;
     }
     
-    /* 컨테이너 글로우 효과 */
+    /* 컨테이너 - 반투명 다크 배경 */
     .element-container {
-        background: rgba(26, 26, 46, 0.3);
+        background: rgba(30, 30, 63, 0.3);
         border-radius: 8px;
         padding: 0.5rem;
     }
     
     /* 데이터프레임 스타일링 */
     .stDataFrame {
-        background-color: rgba(26, 26, 46, 0.8);
+        background-color: rgba(37, 37, 80, 0.8);
+        border: 1px solid rgba(100, 100, 255, 0.1);
         border-radius: 10px;
         overflow: hidden;
-        box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
     }
     
-    /* 체크박스 네온 효과 */
+    /* 체크박스 */
     .stCheckbox > label {
-        color: #ffffff !important;
+        color: #c0c0d0 !important;
     }
     
     .stCheckbox input:checked + span {
-        background-color: #00f0ff !important;
-        box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        background-color: #00d4ff !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -554,57 +550,62 @@ def display_results():
         display_references()
 
 
-def display_energy_flow_sankey(data, hour_idx):
-    """에너지 흐름 Sankey 다이어그램 표시"""
+def display_static_energy_flow_sankey(data):
+    """정적 에너지 흐름 요약 Sankey 다이어그램 표시 (전체 시뮬레이션 기간 누적)"""
     
-    # 데이터 추출 (해당 시간 인덱스)
+    # 데이터 추출
     pv_data = _safe_dict(data['pv'])
     aidc_data = _safe_dict(data['aidc'])
     dcbus_data = _safe_dict(data['dcbus'])
-    hess_df = data['hess']
-    h2_df = data['h2']
-    grid_df = data['grid']
     
-    # 해당 시점의 전력값 추출 (MW)
-    pv_power = pv_data['power_mw'][hour_idx] if hour_idx < len(pv_data['power_mw']) else 0
-    aidc_power = aidc_data['total_power_mw'][hour_idx] if hour_idx < len(aidc_data['total_power_mw']) else 0
+    # 전체 시뮬레이션 기간의 누적 에너지 계산 (MWh)
+    pv_total = sum(pv_data['power_mw']) if pv_data['power_mw'] else 0
+    aidc_total = sum(aidc_data['total_power_mw']) if aidc_data['total_power_mw'] else 0
     
-    # HESS, H2, Grid 데이터 (DataFrame에서 추출)
-    if hour_idx < len(hess_df):
-        hess_charge = hess_df.iloc[hour_idx]['charge_mw'] if 'charge_mw' in hess_df.columns else 0
-        hess_discharge = hess_df.iloc[hour_idx]['discharge_mw'] if 'discharge_mw' in hess_df.columns else 0
-    else:
-        hess_charge, hess_discharge = 0, 0
+    # HESS 데이터
+    hess_charge_total = sum(dcbus_data['bess_charge_mw']) if dcbus_data.get('bess_charge_mw') else 0
+    hess_discharge_total = sum(dcbus_data['bess_discharge_mw']) if dcbus_data.get('bess_discharge_mw') else 0
     
-    if hour_idx < len(h2_df):
-        h2_electrolyzer = h2_df.iloc[hour_idx]['electrolyzer_mw'] if 'electrolyzer_mw' in h2_df.columns else 0
-        h2_fuelcell = h2_df.iloc[hour_idx]['fuelcell_mw'] if 'fuelcell_mw' in h2_df.columns else 0
-    else:
-        h2_electrolyzer, h2_fuelcell = 0, 0
+    # Grid 데이터  
+    grid_import_total = sum(dcbus_data['grid_import_mw']) if dcbus_data.get('grid_import_mw') else 0
+    grid_export_total = sum(dcbus_data['grid_export_mw']) if dcbus_data.get('grid_export_mw') else 0
     
-    if hour_idx < len(grid_df):
-        grid_import = max(0, grid_df.iloc[hour_idx]['import_mw']) if 'import_mw' in grid_df.columns else 0
-        grid_export = max(0, grid_df.iloc[hour_idx]['export_mw']) if 'export_mw' in grid_df.columns else 0
-    else:
-        grid_import, grid_export = 0, 0
+    # H2 시스템 데이터 (간단화)
+    h2_electrolyzer_total = pv_total * 0.1  # PV의 10%를 H2 전해조로 가정
+    h2_fuelcell_total = h2_electrolyzer_total * 0.3  # 저장된 H2의 30%를 연료전지로 가정
     
-    # DC Bus로 들어오는/나가는 전력 계산
-    dcbus_in = pv_power + hess_discharge + h2_fuelcell + grid_import
-    dcbus_out = aidc_power + hess_charge + h2_electrolyzer + grid_export
+    # Curtailment (출력제한)
+    curtailment_total = max(0, pv_total - aidc_total - hess_charge_total - h2_electrolyzer_total - grid_export_total) * 0.05
     
-    # Sankey 노드 정의 (네온 색상)
+    # Sankey 노드 정의 (좌→우 배치, GDI 스타일 색상)
     node_labels = [
-        "PV", "DC Bus", "AIDC", "HESS", "H₂ System", "Grid", "Wind (Future)"
+        # 좌측 (에너지 소스)
+        "☀️ Solar PV",           # 0
+        "🔋 HESS 방전",          # 1  
+        "💧 H₂ Fuel Cell",       # 2
+        "🔌 Grid Import",        # 3
+        # 중앙 (DC Bus)
+        "⚡ DC Bus",            # 4
+        # 우측 (에너지 싱크)
+        "🖥️ AIDC",             # 5
+        "🔋 HESS 충전",          # 6
+        "💧 H₂ 전해조",          # 7
+        "📤 Grid Export",        # 8
+        "❌ Curtailment"        # 9
     ]
     
+    # GDI 스타일 노드 컬러
     node_colors = [
-        "#ffff00",   # PV - 노란 네온
-        "#ffffff",   # DC Bus - 화이트
-        "#ff0040",   # AIDC - 빨강 네온  
-        "#00f0ff",   # HESS - 시안
-        "#39ff14",   # H2 - 네온그린
-        "#ff00ff",   # Grid - 마젠타
-        "#ffd700"    # Wind - 골드
+        "#ffdd00",    # PV - 골드
+        "#00d4ff",    # HESS 방전 - 시안
+        "#34d399",    # H2 Fuel Cell - 연한 그린
+        "#a78bfa",    # Grid Import - 라벤더
+        "#ffffff",    # DC Bus - 화이트
+        "#ff4060",    # AIDC - 연한 빨강
+        "#00d4ff",    # HESS 충전 - 시안
+        "#34d399",    # H2 전해조 - 연한 그린
+        "#a78bfa",    # Grid Export - 라벤더
+        "#999999"     # Curtailment - 그레이
     ]
     
     # Sankey 링크 정의 (소스, 타겟, 값)
@@ -613,69 +614,72 @@ def display_energy_flow_sankey(data, hour_idx):
     values = []
     link_colors = []
     
-    # PV → DC Bus
-    if pv_power > 0.1:
-        source_nodes.append(0)  # PV
-        target_nodes.append(1)  # DC Bus  
-        values.append(pv_power)
-        link_colors.append("rgba(255, 255, 0, 0.4)")
+    # 좌측 → DC Bus (에너지 공급)
+    if pv_total > 0.1:
+        source_nodes.append(0)  # Solar PV
+        target_nodes.append(4)  # DC Bus
+        values.append(pv_total)
+        link_colors.append("rgba(255, 221, 0, 0.6)")
     
-    # DC Bus → AIDC
-    if aidc_power > 0.1:
-        source_nodes.append(1)  # DC Bus
-        target_nodes.append(2)  # AIDC
-        values.append(aidc_power)
-        link_colors.append("rgba(255, 0, 64, 0.4)")
+    if hess_discharge_total > 0.1:
+        source_nodes.append(1)  # HESS 방전
+        target_nodes.append(4)  # DC Bus
+        values.append(hess_discharge_total)
+        link_colors.append("rgba(0, 212, 255, 0.6)")
     
-    # DC Bus → HESS (충전)
-    if hess_charge > 0.1:
-        source_nodes.append(1)  # DC Bus
-        target_nodes.append(3)  # HESS
-        values.append(hess_charge)
-        link_colors.append("rgba(0, 240, 255, 0.4)")
+    if h2_fuelcell_total > 0.1:
+        source_nodes.append(2)  # H₂ Fuel Cell
+        target_nodes.append(4)  # DC Bus
+        values.append(h2_fuelcell_total)
+        link_colors.append("rgba(52, 211, 153, 0.6)")
     
-    # HESS → DC Bus (방전)
-    if hess_discharge > 0.1:
-        source_nodes.append(3)  # HESS
-        target_nodes.append(1)  # DC Bus
-        values.append(hess_discharge)
-        link_colors.append("rgba(0, 240, 255, 0.4)")
+    if grid_import_total > 0.1:
+        source_nodes.append(3)  # Grid Import
+        target_nodes.append(4)  # DC Bus
+        values.append(grid_import_total)
+        link_colors.append("rgba(167, 139, 250, 0.6)")
     
-    # DC Bus → H₂ System (전기분해)
-    if h2_electrolyzer > 0.1:
-        source_nodes.append(1)  # DC Bus
-        target_nodes.append(4)  # H₂ System
-        values.append(h2_electrolyzer)
-        link_colors.append("rgba(57, 255, 20, 0.4)")
+    # DC Bus → 우측 (에너지 소비/저장)
+    if aidc_total > 0.1:
+        source_nodes.append(4)  # DC Bus
+        target_nodes.append(5)  # AIDC
+        values.append(aidc_total)
+        link_colors.append("rgba(255, 64, 96, 0.6)")
     
-    # H₂ System → DC Bus (연료전지)
-    if h2_fuelcell > 0.1:
-        source_nodes.append(4)  # H₂ System  
-        target_nodes.append(1)  # DC Bus
-        values.append(h2_fuelcell)
-        link_colors.append("rgba(57, 255, 20, 0.4)")
+    if hess_charge_total > 0.1:
+        source_nodes.append(4)  # DC Bus
+        target_nodes.append(6)  # HESS 충전
+        values.append(hess_charge_total)
+        link_colors.append("rgba(0, 212, 255, 0.6)")
     
-    # Grid ↔ DC Bus (양방향)
-    if grid_import > 0.1:
-        source_nodes.append(5)  # Grid
-        target_nodes.append(1)  # DC Bus
-        values.append(grid_import)  
-        link_colors.append("rgba(255, 0, 255, 0.4)")
-        
-    if grid_export > 0.1:
-        source_nodes.append(1)  # DC Bus
-        target_nodes.append(5)  # Grid
-        values.append(grid_export)
-        link_colors.append("rgba(255, 0, 255, 0.4)")
+    if h2_electrolyzer_total > 0.1:
+        source_nodes.append(4)  # DC Bus
+        target_nodes.append(7)  # H₂ 전해조
+        values.append(h2_electrolyzer_total)
+        link_colors.append("rgba(52, 211, 153, 0.6)")
+    
+    if grid_export_total > 0.1:
+        source_nodes.append(4)  # DC Bus
+        target_nodes.append(8)  # Grid Export
+        values.append(grid_export_total)
+        link_colors.append("rgba(167, 139, 250, 0.6)")
+    
+    if curtailment_total > 0.1:
+        source_nodes.append(4)  # DC Bus
+        target_nodes.append(9)  # Curtailment
+        values.append(curtailment_total)
+        link_colors.append("rgba(153, 153, 153, 0.6)")
     
     # Sankey 다이어그램 생성
     fig = go.Figure(data=[go.Sankey(
         node=dict(
             pad=15,
             thickness=20,
-            line=dict(color="black", width=2),
+            line=dict(color="rgba(255,255,255,0.2)", width=1),
             label=node_labels,
-            color=node_colors
+            color=node_colors,
+            x=[0.1, 0.1, 0.1, 0.1, 0.5, 0.9, 0.9, 0.9, 0.9, 0.9],  # 좌→중앙→우 배치
+            y=[0.9, 0.7, 0.5, 0.3, 0.6, 0.9, 0.7, 0.5, 0.3, 0.1]   # 수직 위치
         ),
         link=dict(
             source=source_nodes,
@@ -686,37 +690,37 @@ def display_energy_flow_sankey(data, hour_idx):
     )])
     
     fig.update_layout(
-        title=f"에너지 흐름 (시간: {hour_idx:02d}:00)",
+        title="에너지 흐름 요약 (전체 시뮬레이션 기간)",
         font_size=12,
         height=500,
         template='plotly_dark'
     )
     
-    # 현재 전력값들을 메트릭으로 표시
+    # 요약 메트릭 표시
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.metric("🌞 PV", f"{pv_power:.1f} MW", 
-                 delta=None if hour_idx == 0 else f"{pv_power - pv_data['power_mw'][max(0, hour_idx-1)]:.1f}")
+        st.metric("☀️ PV 발전", f"{pv_total:.0f} MWh", 
+                 delta=f"평균: {pv_total/len(pv_data['power_mw']):.1f} MW" if pv_data['power_mw'] else "")
     
     with col2:
-        st.metric("🖥️ AIDC", f"{aidc_power:.1f} MW",
-                 delta=None if hour_idx == 0 else f"{aidc_power - aidc_data['total_power_mw'][max(0, hour_idx-1)]:.1f}")
+        st.metric("🖥️ AIDC 소비", f"{aidc_total:.0f} MWh",
+                 delta=f"평균: {aidc_total/len(aidc_data['total_power_mw']):.1f} MW" if aidc_data['total_power_mw'] else "")
     
     with col3:
-        hess_net = hess_discharge - hess_charge
-        st.metric("🔋 HESS", f"{hess_net:+.1f} MW", 
-                 delta=f"{'충전' if hess_charge > hess_discharge else '방전'}")
+        hess_net = hess_discharge_total - hess_charge_total
+        st.metric("🔋 HESS 순", f"{hess_net:+.0f} MWh", 
+                 delta=f"{'방전' if hess_net > 0 else '충전'} 우세")
     
     with col4:
-        h2_net = h2_fuelcell - h2_electrolyzer
-        st.metric("⚡ H₂", f"{h2_net:+.1f} MW",
-                 delta=f"{'발전' if h2_fuelcell > h2_electrolyzer else '전해'}")
+        h2_net = h2_fuelcell_total - h2_electrolyzer_total
+        st.metric("💧 H₂ 순", f"{h2_net:+.0f} MWh",
+                 delta=f"{'발전' if h2_net > 0 else '전해'} 우세")
     
     with col5:
-        grid_net = grid_export - grid_import
-        st.metric("🔌 Grid", f"{grid_net:+.1f} MW",
-                 delta=f"{'수출' if grid_export > grid_import else '수입'}")
+        grid_net = grid_export_total - grid_import_total
+        st.metric("🔌 Grid 순", f"{grid_net:+.0f} MWh",
+                 delta=f"{'수출' if grid_net > 0 else '수입'} 우세")
     
     st.plotly_chart(fig, use_container_width=True)
     
@@ -726,36 +730,11 @@ def display_energy_flow_sankey(data, hour_idx):
 def display_power_balance(data):
     """전력 균형 결과 표시"""
     
-    # ⚡ 에너지 흐름 애니메이션 (Sankey 다이어그램)
-    st.subheader("⚡ 에너지 흐름 애니메이션")
+    # ⚡ 정적 에너지 흐름 요약 Sankey 다이어그램
+    st.subheader("⚡ 에너지 흐름 요약")
     
-    # 시뮬레이션 시간 길이 확인
-    pv_data_temp = _safe_dict(data['pv'])
-    sim_hours = len(pv_data_temp['power_mw'])
-    
-    # 시간 슬라이더
-    current_hour = st.slider(
-        "시뮬레이션 시간 선택",
-        min_value=0, max_value=sim_hours-1, value=0,
-        key="energy_flow_time_slider"
-    )
-    
-    # Play/Pause 버튼 (선택사항)
-    col1, col2, col3 = st.columns([1, 1, 8])
-    with col1:
-        if st.button("▶️ Play", key="play_btn"):
-            st.session_state.energy_flow_playing = True
-    with col2:
-        if st.button("⏸️ Pause", key="pause_btn"):
-            st.session_state.energy_flow_playing = False
-    
-    # 자동 재생 로직 (간단 구현)
-    if st.session_state.get('energy_flow_playing', False):
-        if current_hour < sim_hours - 1:
-            st.rerun()
-    
-    # 해당 시점의 데이터 추출
-    display_energy_flow_sankey(data, current_hour)
+    # 정적 Sankey 표시
+    display_static_energy_flow_sankey(data)
     
     st.subheader("⚖️ 전력 공급 vs 수요")
     
