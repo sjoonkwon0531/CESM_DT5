@@ -52,7 +52,35 @@ if 'simulation_data' not in st.session_state:
 if 'weather_data' not in st.session_state:
     st.session_state.weather_data = None
 
-# 클린 화이트 테마 (Streamlit 기본)
+# 탭 바 가로 스크롤 + 클린 화이트 테마
+st.markdown("""
+<style>
+/* 탭 바: 가로 스크롤, 줄바꿈 방지 */
+div[data-testid="stTabs"] > div[role="tablist"] {
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+    padding-bottom: 4px;
+}
+div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar {
+    height: 6px;
+}
+div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar-track {
+    background: transparent;
+}
+div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+div[data-testid="stTabs"] > div[role="tablist"] button {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 @st.cache_data
