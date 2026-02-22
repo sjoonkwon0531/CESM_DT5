@@ -36,8 +36,11 @@ from config import (
     PV_TYPES, GPU_TYPES, PUE_TIERS, WORKLOAD_TYPES, 
     CONVERTER_EFFICIENCY, UI_CONFIG, COLOR_PALETTE,
     HESS_LAYER_CONFIGS, H2_SYSTEM_CONFIG, GRID_TARIFF_CONFIG,
-    AI_EMS_CONFIG, CARBON_CONFIG, ECONOMICS_CONFIG
+    AI_EMS_CONFIG, CARBON_CONFIG, ECONOMICS_CONFIG,
+    INTERNATIONAL_BENCHMARKS, BENCHMARK_API_SOURCES, BENCHMARK_LAST_UPDATED
 )
+import copy
+import json
 
 # Streamlit 페이지 설정
 st.set_page_config(
@@ -2357,88 +2360,81 @@ def display_data_download(data):
 # 국제 비교 탭
 # ═══════════════════════════════════════════════════════════════
 def display_international_comparison(data):
-    """국제 마이크로그리드 비교"""
+    """국제 마이크로그리드 비교 — config 기반 + 사용자 override"""
     st.subheader("🌏 국제 마이크로그리드 비교")
 
-    # 비교군 데이터 (문헌 기반)
-    INTERNATIONAL_BENCHMARKS = {
-        '🇰🇷 한국 (본 DT)': {
-            'country': 'Korea', 'flag': '🇰🇷',
-            'capacity_mw': 100, 'pv_type': 'Tandem Perovskite-Si',
-            'storage': 'HESS (Supercap+BESS) + H₂',
-            'grid_type': 'Island + Grid-tied hybrid',
-            'irradiance_kwh_m2_yr': 1340,  # 한국 평균
-            'elec_price_usd_mwh': 90,
-            'carbon_intensity_gco2_kwh': 415,  # 한전 2024
-            'carbon_price_usd_ton': 20,  # K-ETS ~25,000 KRW
-            'pv_lcoe_usd_mwh': None,  # 시뮬레이션 결과 사용
-            'capacity_factor': None,
-            'self_sufficiency': None,
-            'notes': '100MW급 AIDC 전용, AI-EMS 3-tier 최적화'
-        },
-        '🇺🇸 미국 (NREL Benchmark)': {
-            'country': 'USA', 'flag': '🇺🇸',
-            'capacity_mw': 100, 'pv_type': 'c-Si Bifacial',
-            'storage': 'Li-ion BESS (4h)',
-            'grid_type': 'Grid-tied + DR',
-            'irradiance_kwh_m2_yr': 1800,  # US Southwest avg
-            'elec_price_usd_mwh': 65,  # US commercial avg
-            'carbon_intensity_gco2_kwh': 370,  # US grid avg 2024
-            'carbon_price_usd_ton': 0,  # No federal carbon price
-            'pv_lcoe_usd_mwh': 28,  # NREL ATB 2024
-            'capacity_factor': 0.26,
-            'self_sufficiency': 0.45,
-            'notes': 'NREL ATB 2024, Southwest US, utility-scale PV+BESS'
-        },
-        '🇨🇳 중국 (SERC 기준)': {
-            'country': 'China', 'flag': '🇨🇳',
-            'capacity_mw': 100, 'pv_type': 'c-Si (LONGi/JA Solar)',
-            'storage': 'LFP BESS (2h mandatory)',
-            'grid_type': 'Grid-tied (mandatory storage)',
-            'irradiance_kwh_m2_yr': 1500,  # 중국 서북부
-            'elec_price_usd_mwh': 55,  # 중국 산업용 평균
-            'carbon_intensity_gco2_kwh': 555,  # 중국 그리드 2024
-            'carbon_price_usd_ton': 10,  # 중국 ETS ~70 CNY
-            'pv_lcoe_usd_mwh': 22,  # 세계 최저
-            'capacity_factor': 0.18,
-            'self_sufficiency': 0.35,
-            'notes': '중국 SERC 기준, 서북부 대규모 PV 기지, 2h 저장 의무'
-        },
-        '🇯🇵 일본 (METI 기준)': {
-            'country': 'Japan', 'flag': '🇯🇵',
-            'capacity_mw': 50, 'pv_type': 'c-Si + Perovskite pilot',
-            'storage': 'Li-ion + 레독스플로우',
-            'grid_type': 'Island-capable (방재)',
-            'irradiance_kwh_m2_yr': 1200,  # 일본 평균
-            'elec_price_usd_mwh': 150,  # 일본 산업용 (높음)
-            'carbon_intensity_gco2_kwh': 450,  # 일본 그리드 2024
-            'carbon_price_usd_ton': 5,  # GX surcharge ~750 JPY
-            'pv_lcoe_usd_mwh': 75,  # FIT/FIP 기반
-            'capacity_factor': 0.15,
-            'self_sufficiency': 0.30,
-            'notes': 'METI 2024, 분산형 마이크로그리드, 방재 겸용 설계'
-        },
-        '🇩🇪 독일 (Fraunhofer ISE)': {
-            'country': 'Germany', 'flag': '🇩🇪',
-            'capacity_mw': 80, 'pv_type': 'c-Si Bifacial + Agri-PV',
-            'storage': 'Li-ion + Green H₂',
-            'grid_type': 'Grid-tied (Energiewende)',
-            'irradiance_kwh_m2_yr': 1050,  # 독일 평균
-            'elec_price_usd_mwh': 180,  # 독일 산업용 (최고)
-            'carbon_intensity_gco2_kwh': 350,  # 독일 그리드 2024 (개선중)
-            'carbon_price_usd_ton': 55,  # EU-ETS ~€50
-            'pv_lcoe_usd_mwh': 45,  # Fraunhofer ISE 2024
-            'capacity_factor': 0.12,
-            'self_sufficiency': 0.38,
-            'notes': 'Fraunhofer ISE 2024, Agri-PV + Green H₂ 시범'
-        }
-    }
+    # config에서 벤치마크 복사 (원본 보호)
+    benchmarks = copy.deepcopy(INTERNATIONAL_BENCHMARKS)
 
-    # 시뮬레이션 결과로 한국 데이터 업데이트
+    # --- 데이터 업데이트 상태 ---
+    st.caption(f"📅 기본 데이터 기준일: {BENCHMARK_LAST_UPDATED} | 출처: NREL ATB, IRENA, Fraunhofer ISE, METI, SERC")
+
+    # --- 사용자 Override UI ---
+    with st.expander("⚙️ 벤치마크 값 수동 조정 (Override)", expanded=False):
+        st.markdown("최신 데이터로 직접 업데이트하거나, What-if 시나리오를 테스트할 수 있습니다.")
+
+        override_country = st.selectbox(
+            "조정할 국가", list(benchmarks.keys()),
+            format_func=lambda k: benchmarks[k]['label'],
+            key="override_country"
+        )
+
+        info = benchmarks[override_country]
+        oc1, oc2, oc3, oc4 = st.columns(4)
+        with oc1:
+            new_irr = st.number_input("일사량 (kWh/m²/yr)", value=info['irradiance_kwh_m2_yr'],
+                                       min_value=500, max_value=2500, step=50, key="ov_irr")
+            info['irradiance_kwh_m2_yr'] = new_irr
+        with oc2:
+            new_elec = st.number_input("전기요금 ($/MWh)", value=info['elec_price_usd_mwh'],
+                                        min_value=10, max_value=300, step=5, key="ov_elec")
+            info['elec_price_usd_mwh'] = new_elec
+        with oc3:
+            new_ci = st.number_input("탄소강도 (gCO₂/kWh)", value=info['carbon_intensity_gco2_kwh'],
+                                      min_value=50, max_value=800, step=10, key="ov_ci")
+            info['carbon_intensity_gco2_kwh'] = new_ci
+        with oc4:
+            new_cp = st.number_input("탄소가격 ($/ton)", value=info['carbon_price_usd_ton'],
+                                      min_value=0, max_value=200, step=5, key="ov_cp")
+            info['carbon_price_usd_ton'] = new_cp
+
+        oc5, oc6 = st.columns(2)
+        with oc5:
+            cur_lcoe = info.get('pv_lcoe_usd_mwh') or 50
+            new_lcoe = st.number_input("LCOE ($/MWh)", value=int(cur_lcoe),
+                                        min_value=10, max_value=200, step=5, key="ov_lcoe")
+            info['pv_lcoe_usd_mwh'] = new_lcoe
+        with oc6:
+            cur_cf = info.get('capacity_factor') or 0.15
+            new_cf = st.slider("Capacity Factor", 0.05, 0.40, float(cur_cf), 0.01, key="ov_cf")
+            info['capacity_factor'] = new_cf
+
+        # 출처 표시
+        sources = info.get('sources', {})
+        if sources:
+            st.markdown("**데이터 출처:**")
+            for field, src in sources.items():
+                st.caption(f"  • {field}: {src}")
+
+    # --- API 자동 업데이트 안내 ---
+    with st.expander("🔄 자동 업데이트 파이프라인 (API 소스)", expanded=False):
+        st.markdown("분기별/연간 자동 업데이트 가능한 공개 API 소스:")
+        api_data = []
+        for src_id, src_info in BENCHMARK_API_SOURCES.items():
+            api_data.append({
+                'ID': src_id,
+                '설명': src_info['description'],
+                '주기': src_info['update_freq'],
+                '업데이트 필드': ', '.join(src_info['fields']),
+                'URL': src_info['url'],
+            })
+        st.dataframe(pd.DataFrame(api_data), use_container_width=True, hide_index=True)
+        st.info("💡 **향후 계획**: 크론잡으로 분기마다 API fetch → config.py 자동 갱신 → Git push")
+
+    # --- 시뮬레이션 결과로 한국 데이터 자동 업데이트 ---
     if data is not None:
-        kr = INTERNATIONAL_BENCHMARKS['🇰🇷 한국 (본 DT)']
+        kr = benchmarks['KR']
         pv_dict = _safe_dict(data.get('pv', {}))
-        aidc_dict = _safe_dict(data.get('aidc', {}))
         ems_kpi = data.get('ems_kpi', {})
 
         if isinstance(pv_dict, dict) and 'capacity_factor' in pv_dict:
@@ -2448,7 +2444,6 @@ def display_international_comparison(data):
         if ems_kpi and isinstance(ems_kpi, dict):
             kr['self_sufficiency'] = ems_kpi.get('self_sufficiency_ratio', 0)
 
-        # LCOE from economics if available
         econ = data.get('modules', {}).get('economics')
         if econ:
             try:
@@ -2456,72 +2451,56 @@ def display_international_comparison(data):
                     capex_total_billion_krw=10000,
                     annual_generation_mwh=sum(pv_dict.get('power_mw', [0])) * 365 / max(len(pv_dict.get('power_mw', [1])), 1) if isinstance(pv_dict, dict) else 100000,
                     opex_annual_billion_krw=200,
-                    lifetime_years=25,
-                    discount_rate=0.06
+                    lifetime_years=25, discount_rate=0.06
                 )
-                kr['pv_lcoe_usd_mwh'] = lcoe_result.get('lcoe_krw_per_mwh', 136500) / 1350  # KRW→USD
+                kr['pv_lcoe_usd_mwh'] = lcoe_result.get('lcoe_krw_per_mwh', 136500) / 1350
             except:
-                kr['pv_lcoe_usd_mwh'] = 101  # 136,500 KRW / 1350 환율
+                kr['pv_lcoe_usd_mwh'] = 101
 
     # --- 1. 비교 테이블 ---
     st.markdown("### 📋 주요 지표 비교")
-    
+
     table_data = []
-    for label, info in INTERNATIONAL_BENCHMARKS.items():
+    for code, info in benchmarks.items():
         table_data.append({
-            '국가': label,
+            '국가': info['label'],
             'PV 용량 (MW)': info['capacity_mw'],
             'PV 기술': info['pv_type'],
             '일사량 (kWh/m²/yr)': info['irradiance_kwh_m2_yr'],
             '전기요금 ($/MWh)': info['elec_price_usd_mwh'],
-            'LCOE ($/MWh)': f"{info['pv_lcoe_usd_mwh']:.0f}" if info['pv_lcoe_usd_mwh'] else '시뮬레이션 중',
+            'LCOE ($/MWh)': f"{info['pv_lcoe_usd_mwh']:.0f}" if info['pv_lcoe_usd_mwh'] else 'DT 연동',
             'CF': f"{info['capacity_factor']:.1%}" if info['capacity_factor'] else '-',
             '자급률': f"{info['self_sufficiency']:.0%}" if info['self_sufficiency'] else '-',
             '탄소강도 (gCO₂/kWh)': info['carbon_intensity_gco2_kwh'],
             '탄소가격 ($/ton)': info['carbon_price_usd_ton'],
         })
-    
-    df_table = pd.DataFrame(table_data)
-    st.dataframe(df_table, use_container_width=True, hide_index=True)
+
+    st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
 
     # --- 2. Radar Chart ---
     st.markdown("### 🕸️ 종합 경쟁력 레이더 차트")
-    
-    # 정규화 (0-1)
-    metrics = ['irradiance_kwh_m2_yr', 'elec_price_usd_mwh', 'carbon_intensity_gco2_kwh',
-               'carbon_price_usd_ton']
-    metric_labels = ['일사량', '전기요금 경쟁력', '그리드 청정도', '탄소 규제 강도']
-    
+
     fig_radar = go.Figure()
     colors = ['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6']
-    
-    for idx, (label, info) in enumerate(INTERNATIONAL_BENCHMARKS.items()):
-        values = []
-        # 일사량: 높을수록 좋음 (normalize to 0-1)
-        values.append(info['irradiance_kwh_m2_yr'] / 2000)
-        # 전기요금: 낮을수록 좋음 → 역전
-        values.append(1 - info['elec_price_usd_mwh'] / 200)
-        # 탄소강도: 낮을수록 좋음 → 역전
-        values.append(1 - info['carbon_intensity_gco2_kwh'] / 600)
-        # 탄소규제: 높을수록 RE 인센티브 → 높을수록 좋음
-        values.append(min(1.0, info['carbon_price_usd_ton'] / 60))
-        # 자급률
-        sf = info.get('self_sufficiency') or 0.3
-        values.append(sf)
-        # CF
-        cf = info.get('capacity_factor') or 0.15
-        values.append(cf / 0.30)
-        
-        values.append(values[0])  # close the polygon
-        
+    radar_labels = ['일사량', '전기요금 경쟁력', '그리드 청정도', '탄소 규제 강도', '자급률', 'Capacity Factor']
+
+    for idx, (code, info) in enumerate(benchmarks.items()):
+        values = [
+            info['irradiance_kwh_m2_yr'] / 2000,
+            1 - info['elec_price_usd_mwh'] / 200,
+            1 - info['carbon_intensity_gco2_kwh'] / 600,
+            min(1.0, info['carbon_price_usd_ton'] / 60),
+            (info.get('self_sufficiency') or 0.3),
+            (info.get('capacity_factor') or 0.15) / 0.30,
+        ]
+        values.append(values[0])  # close polygon
+
         fig_radar.add_trace(go.Scatterpolar(
-            r=values,
-            theta=metric_labels + ['자급률', 'Capacity Factor', metric_labels[0]],
+            r=values, theta=radar_labels + [radar_labels[0]],
             fill='toself', name=info['flag'] + ' ' + info['country'],
-            line=dict(color=colors[idx % len(colors)]),
-            opacity=0.7
+            line=dict(color=colors[idx % len(colors)]), opacity=0.7
         ))
-    
+
     fig_radar.update_layout(
         polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
         showlegend=True, height=550, template='plotly_white',
@@ -2531,76 +2510,55 @@ def display_international_comparison(data):
 
     # --- 3. Bar Charts ---
     st.markdown("### 📊 주요 지표 상세 비교")
+    countries = [info['flag'] + ' ' + info['country'] for info in benchmarks.values()]
+    bar_colors = ['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6']
 
-    countries = [info['flag'] + ' ' + info['country'] for info in INTERNATIONAL_BENCHMARKS.values()]
-    
     col1, col2 = st.columns(2)
-    
     with col1:
-        # LCOE 비교
-        lcoe_vals = []
-        for info in INTERNATIONAL_BENCHMARKS.values():
-            lcoe_vals.append(info.get('pv_lcoe_usd_mwh') or 0)
-        fig_lcoe = go.Figure(go.Bar(
-            x=countries, y=lcoe_vals,
-            marker_color=['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'],
-            text=[f"${v:.0f}" for v in lcoe_vals], textposition='outside'
-        ))
-        fig_lcoe.update_layout(title="PV LCOE ($/MWh)", height=350, template='plotly_white',
-                               yaxis_title="$/MWh")
-        st.plotly_chart(fig_lcoe, use_container_width=True)
-
+        lcoe_vals = [info.get('pv_lcoe_usd_mwh') or 0 for info in benchmarks.values()]
+        fig = go.Figure(go.Bar(x=countries, y=lcoe_vals, marker_color=bar_colors,
+                               text=[f"${v:.0f}" for v in lcoe_vals], textposition='outside'))
+        fig.update_layout(title="PV LCOE ($/MWh)", height=350, template='plotly_white', yaxis_title="$/MWh")
+        st.plotly_chart(fig, use_container_width=True)
     with col2:
-        # 전기요금 비교
-        elec_vals = [info['elec_price_usd_mwh'] for info in INTERNATIONAL_BENCHMARKS.values()]
-        fig_elec = go.Figure(go.Bar(
-            x=countries, y=elec_vals,
-            marker_color=['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'],
-            text=[f"${v}" for v in elec_vals], textposition='outside'
-        ))
-        fig_elec.update_layout(title="산업용 전기요금 ($/MWh)", height=350, template='plotly_white',
-                               yaxis_title="$/MWh")
-        st.plotly_chart(fig_elec, use_container_width=True)
+        elec_vals = [info['elec_price_usd_mwh'] for info in benchmarks.values()]
+        fig = go.Figure(go.Bar(x=countries, y=elec_vals, marker_color=bar_colors,
+                               text=[f"${v}" for v in elec_vals], textposition='outside'))
+        fig.update_layout(title="산업용 전기요금 ($/MWh)", height=350, template='plotly_white', yaxis_title="$/MWh")
+        st.plotly_chart(fig, use_container_width=True)
 
     col3, col4 = st.columns(2)
-    
     with col3:
-        # 탄소강도 비교
-        carbon_vals = [info['carbon_intensity_gco2_kwh'] for info in INTERNATIONAL_BENCHMARKS.values()]
-        fig_carbon = go.Figure(go.Bar(
-            x=countries, y=carbon_vals,
-            marker_color=['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'],
-            text=[f"{v}" for v in carbon_vals], textposition='outside'
-        ))
-        fig_carbon.update_layout(title="그리드 탄소강도 (gCO₂/kWh)", height=350, template='plotly_white',
-                                 yaxis_title="gCO₂/kWh")
-        st.plotly_chart(fig_carbon, use_container_width=True)
-
+        ci_vals = [info['carbon_intensity_gco2_kwh'] for info in benchmarks.values()]
+        fig = go.Figure(go.Bar(x=countries, y=ci_vals, marker_color=bar_colors,
+                               text=[f"{v}" for v in ci_vals], textposition='outside'))
+        fig.update_layout(title="그리드 탄소강도 (gCO₂/kWh)", height=350, template='plotly_white', yaxis_title="gCO₂/kWh")
+        st.plotly_chart(fig, use_container_width=True)
     with col4:
-        # 탄소가격 비교
-        cprice_vals = [info['carbon_price_usd_ton'] for info in INTERNATIONAL_BENCHMARKS.values()]
-        fig_cprice = go.Figure(go.Bar(
-            x=countries, y=cprice_vals,
-            marker_color=['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'],
-            text=[f"${v}" for v in cprice_vals], textposition='outside'
-        ))
-        fig_cprice.update_layout(title="탄소가격 ($/ton CO₂)", height=350, template='plotly_white',
-                                 yaxis_title="$/ton")
-        st.plotly_chart(fig_cprice, use_container_width=True)
+        cp_vals = [info['carbon_price_usd_ton'] for info in benchmarks.values()]
+        fig = go.Figure(go.Bar(x=countries, y=cp_vals, marker_color=bar_colors,
+                               text=[f"${v}" for v in cp_vals], textposition='outside'))
+        fig.update_layout(title="탄소가격 ($/ton CO₂)", height=350, template='plotly_white', yaxis_title="$/ton")
+        st.plotly_chart(fig, use_container_width=True)
 
     # --- 4. 정책 환경 요약 ---
     st.markdown("### 📝 국가별 정책 환경 및 특이사항")
-    
-    for label, info in INTERNATIONAL_BENCHMARKS.items():
-        with st.expander(label):
+    for code, info in benchmarks.items():
+        with st.expander(info['label']):
             st.markdown(f"""
-            | 항목 | 내용 |
-            |------|------|
-            | **PV 기술** | {info['pv_type']} |
-            | **저장 시스템** | {info['storage']} |
-            | **계통 연계** | {info['grid_type']} |
-            | **비고** | {info['notes']} |
-            """)
+| 항목 | 내용 |
+|------|------|
+| **PV 기술** | {info['pv_type']} |
+| **저장 시스템** | {info['storage']} |
+| **계통 연계** | {info['grid_type']} |
+| **비고** | {info['notes']} |
+""")
+            # 출처 표시
+            sources = info.get('sources', {})
+            if sources:
+                st.markdown("**📚 데이터 출처:**")
+                for field, src in sources.items():
+                    st.caption(f"  • {field}: {src}")
 
     # --- 5. 시사점 ---
     st.markdown("### 💡 비교 시사점")
@@ -2610,7 +2568,7 @@ def display_international_comparison(data):
     - 💰 **전기요금**: 중간 ($90/MWh) — 일본·독일 대비 경쟁력, 미국·중국 대비 불리
     - 🏭 **탄소강도**: 높음 (415 gCO₂/kWh) — RE 전환 필요성 큼 → **AIDC 마이크로그리드 당위성 ↑**
     - 📜 **탄소가격**: 낮음 ($20/ton) — K-ETS 강화 시 경제성 급상승 (정책 시뮬레이터 참조)
-    
+
     **핵심 차별점 (본 DT5):**
     - 🔬 **Tandem Perovskite-Si**: 효율 30%+ 차세대 PV (타국 대비 기술 리드)
     - ⚡ **3-tier HESS**: Supercap(초단주기) + BESS(중주기) + H₂(장주기) → 타국은 BESS 단일

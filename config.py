@@ -430,3 +430,144 @@ ECONOMICS_CONFIG = {
         "load_variation_std_pct": 10,
     },
 }
+# =============================================================================
+# 국제 벤치마크 데이터
+# 출처: NREL ATB 2024, IRENA RENEWCOST 2024, Fraunhofer ISE, METI, SERC
+# 최종 업데이트: 2026-02-22
+# =============================================================================
+INTERNATIONAL_BENCHMARKS = {
+    'KR': {
+        'country': 'Korea', 'flag': '🇰🇷', 'label': '🇰🇷 한국 (본 DT)',
+        'capacity_mw': 100, 'pv_type': 'Tandem Perovskite-Si',
+        'storage': 'HESS (Supercap+BESS) + H₂',
+        'grid_type': 'Island + Grid-tied hybrid',
+        'irradiance_kwh_m2_yr': 1340,
+        'elec_price_usd_mwh': 90,
+        'carbon_intensity_gco2_kwh': 415,
+        'carbon_price_usd_ton': 20,
+        'pv_lcoe_usd_mwh': None,
+        'capacity_factor': None,
+        'self_sufficiency': None,
+        'notes': '100MW급 AIDC 전용, AI-EMS 3-tier 최적화',
+        'sources': {
+            'irradiance': 'KMA 기상청 TMY3',
+            'elec_price': 'KEPCO 산업용 2024',
+            'carbon_intensity': '전력거래소 2024',
+            'carbon_price': 'K-ETS 할당거래소 2024',
+        }
+    },
+    'US': {
+        'country': 'USA', 'flag': '🇺🇸', 'label': '🇺🇸 미국 (NREL)',
+        'capacity_mw': 100, 'pv_type': 'c-Si Bifacial',
+        'storage': 'Li-ion BESS (4h)',
+        'grid_type': 'Grid-tied + DR',
+        'irradiance_kwh_m2_yr': 1800,
+        'elec_price_usd_mwh': 65,
+        'carbon_intensity_gco2_kwh': 370,
+        'carbon_price_usd_ton': 0,
+        'pv_lcoe_usd_mwh': 28,
+        'capacity_factor': 0.26,
+        'self_sufficiency': 0.45,
+        'notes': 'NREL ATB 2024, Southwest US, utility-scale PV+BESS',
+        'sources': {
+            'irradiance': 'NREL NSRDB TMY3',
+            'elec_price': 'EIA Commercial Avg 2024',
+            'carbon_intensity': 'EPA eGRID 2024',
+            'carbon_price': 'N/A (no federal price)',
+            'lcoe': 'NREL ATB 2024',
+        }
+    },
+    'CN': {
+        'country': 'China', 'flag': '🇨🇳', 'label': '🇨🇳 중국 (SERC)',
+        'capacity_mw': 100, 'pv_type': 'c-Si (LONGi/JA Solar)',
+        'storage': 'LFP BESS (2h mandatory)',
+        'grid_type': 'Grid-tied (mandatory storage)',
+        'irradiance_kwh_m2_yr': 1500,
+        'elec_price_usd_mwh': 55,
+        'carbon_intensity_gco2_kwh': 555,
+        'carbon_price_usd_ton': 10,
+        'pv_lcoe_usd_mwh': 22,
+        'capacity_factor': 0.18,
+        'self_sufficiency': 0.35,
+        'notes': '중국 SERC 기준, 서북부 대규모 PV 기지, 2h 저장 의무',
+        'sources': {
+            'irradiance': 'CMA Typical Meteorological Year',
+            'elec_price': 'NDRC Industrial Tariff 2024',
+            'carbon_intensity': 'MEE China Grid EF 2024',
+            'carbon_price': 'Shanghai Environment Energy Exchange',
+            'lcoe': 'CPIA Annual Report 2024',
+        }
+    },
+    'JP': {
+        'country': 'Japan', 'flag': '🇯🇵', 'label': '🇯🇵 일본 (METI)',
+        'capacity_mw': 50, 'pv_type': 'c-Si + Perovskite pilot',
+        'storage': 'Li-ion + 레독스플로우',
+        'grid_type': 'Island-capable (방재)',
+        'irradiance_kwh_m2_yr': 1200,
+        'elec_price_usd_mwh': 150,
+        'carbon_intensity_gco2_kwh': 450,
+        'carbon_price_usd_ton': 5,
+        'pv_lcoe_usd_mwh': 75,
+        'capacity_factor': 0.15,
+        'self_sufficiency': 0.30,
+        'notes': 'METI 2024, 분산형 마이크로그리드, 방재 겸용 설계',
+        'sources': {
+            'irradiance': 'JMA AMeDAS',
+            'elec_price': 'METI Industrial Tariff 2024',
+            'carbon_intensity': 'MOE Japan Grid EF 2024',
+            'carbon_price': 'GX Surcharge (est. ¥750/ton)',
+            'lcoe': 'METI Cost Verification Committee 2024',
+        }
+    },
+    'DE': {
+        'country': 'Germany', 'flag': '🇩🇪', 'label': '🇩🇪 독일 (Fraunhofer)',
+        'capacity_mw': 80, 'pv_type': 'c-Si Bifacial + Agri-PV',
+        'storage': 'Li-ion + Green H₂',
+        'grid_type': 'Grid-tied (Energiewende)',
+        'irradiance_kwh_m2_yr': 1050,
+        'elec_price_usd_mwh': 180,
+        'carbon_intensity_gco2_kwh': 350,
+        'carbon_price_usd_ton': 55,
+        'pv_lcoe_usd_mwh': 45,
+        'capacity_factor': 0.12,
+        'self_sufficiency': 0.38,
+        'notes': 'Fraunhofer ISE 2024, Agri-PV + Green H₂ 시범',
+        'sources': {
+            'irradiance': 'DWD TRY 2024',
+            'elec_price': 'Destatis Industrial 2024',
+            'carbon_intensity': 'UBA Germany Grid EF 2024',
+            'carbon_price': 'EU-ETS (ICE ECX)',
+            'lcoe': 'Fraunhofer ISE LCOE Study 2024',
+        }
+    },
+}
+
+# 벤치마크 자동 업데이트 API 소스
+BENCHMARK_API_SOURCES = {
+    'ember_carbon_intensity': {
+        'url': 'https://api.ember-climate.org/v1/carbon-intensity/latest',
+        'description': 'Ember Climate — 전세계 실시간 탄소강도',
+        'update_freq': 'quarterly',
+        'fields': ['carbon_intensity_gco2_kwh'],
+    },
+    'eu_ets_price': {
+        'url': 'https://api.ember-climate.org/v1/carbon-price/eu-ets',
+        'description': 'EU-ETS 탄소배출권 가격',
+        'update_freq': 'monthly',
+        'fields': ['carbon_price_usd_ton'],
+    },
+    'nrel_atb': {
+        'url': 'https://atb.nrel.gov/electricity/data',
+        'description': 'NREL Annual Technology Baseline',
+        'update_freq': 'annual',
+        'fields': ['pv_lcoe_usd_mwh', 'capacity_factor'],
+    },
+    'irena_renewcost': {
+        'url': 'https://www.irena.org/Data/View-data-by-topic/Costs/Global-LCOE-and-Auction-values',
+        'description': 'IRENA Renewable Cost Database',
+        'update_freq': 'annual',
+        'fields': ['pv_lcoe_usd_mwh'],
+    },
+}
+
+BENCHMARK_LAST_UPDATED = '2026-02-22'
