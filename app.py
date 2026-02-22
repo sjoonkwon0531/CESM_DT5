@@ -1540,6 +1540,99 @@ def _t(key: str) -> str:
 # ═══════════════════════════════════════════════════════════════
 # Week 4 탭: 정책 시뮬레이터
 # ═══════════════════════════════════════════════════════════════
+
+def display_statistics(data):
+    """📈 통계 분석 탭"""
+    st.subheader("📈 통합 통계 분석")
+    
+    try:
+        results = data.get('results', {})
+        
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        pv_data = results.get('pv', {})
+        aidc_data = results.get('aidc', {})
+        hess_data = results.get('hess', {})
+        grid_data = results.get('grid', {})
+        
+        with col1:
+            cf = pv_data.get('capacity_factor', 0)
+            st.metric("PV Capacity Factor", f"{cf*100:.1f}%" if cf else "N/A")
+        with col2:
+            avg_load = aidc_data.get('avg_power_mw', 0)
+            st.metric("평균 AIDC 부하", f"{avg_load:.1f} MW" if avg_load else "N/A")
+        with col3:
+            self_suff = results.get('self_sufficiency', 0)
+            st.metric("자급률", f"{self_suff*100:.1f}%" if self_suff else "N/A")
+        with col4:
+            curtail = results.get('curtailment_pct', 0)
+            st.metric("Curtailment", f"{curtail*100:.1f}%" if curtail else "N/A")
+        
+        st.divider()
+        
+        # Time series summary
+        st.subheader("⏱️ 시간별 에너지 흐름 요약")
+        
+        if 'timeseries' in results:
+            ts = results['timeseries']
+            import pandas as pd
+            df = pd.DataFrame(ts)
+            
+            if not df.empty:
+                import plotly.graph_objects as go
+                fig = go.Figure()
+                
+                for col_name in ['pv_power', 'aidc_load', 'grid_import', 'grid_export']:
+                    if col_name in df.columns:
+                        labels = {
+                            'pv_power': '☀️ PV 발전',
+                            'aidc_load': '🖥️ AIDC 부하',
+                            'grid_import': '📥 그리드 수입',
+                            'grid_export': '📤 그리드 수출',
+                        }
+                        fig.add_trace(go.Scatter(
+                            y=df[col_name], 
+                            name=labels.get(col_name, col_name),
+                            mode='lines'
+                        ))
+                
+                fig.update_layout(
+                    title="시간별 전력 흐름",
+                    xaxis_title="시간 (h)",
+                    yaxis_title="전력 (MW)",
+                    height=400,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("시계열 데이터가 비어있습니다.")
+        else:
+            st.info("시뮬레이션을 먼저 실행해주세요.")
+        
+        # Distribution analysis
+        st.subheader("📊 분포 분석")
+        col1, col2 = st.columns(2)
+        
+        if 'timeseries' in results and results['timeseries']:
+            import plotly.express as px
+            df = pd.DataFrame(results['timeseries'])
+            
+            with col1:
+                if 'pv_power' in df.columns:
+                    fig = px.histogram(df, x='pv_power', nbins=30, title="PV 발전량 분포")
+                    fig.update_layout(height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                if 'aidc_load' in df.columns:
+                    fig = px.histogram(df, x='aidc_load', nbins=30, title="AIDC 부하 분포")
+                    fig.update_layout(height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+    
+    except Exception as e:
+        st.error(f"통계 분석 오류: {e}")
+        st.info("시뮬레이션을 먼저 실행한 후 확인해주세요.")
+
 def display_policy_simulator():
     """정책 시뮬레이터 탭"""
     st.subheader("🏛️ 정책 시뮬레이터")
