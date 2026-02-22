@@ -1804,6 +1804,90 @@ def display_statistics(data):
                             yaxis_title="전력 (MW)", height=500, template='plotly_white',
                             legend=dict(orientation="h", yanchor="bottom", y=-0.25))
             st.plotly_chart(fig, use_container_width=True)
+            
+            # === 24h × Day 히트맵 (컬러맵) ===
+            n_hours = len(pv_power)
+            n_days = max(1, n_hours // 24)
+            if n_days >= 2:
+                st.subheader("🗓️ 일별 × 시간별 에너지 패턴 (히트맵)")
+                
+                def _build_heatmap_matrix(series, n_days):
+                    """시계열을 (days × 24h) 행렬로 변환"""
+                    arr = np.array(series[:n_days * 24])
+                    return arr.reshape(n_days, 24)
+                
+                heatmap_vars = {
+                    'PV 발전 (MW)': (pv_power, 'YlOrRd'),
+                    'AIDC 부하 (MW)': (aidc_power, 'Blues'),
+                    '잉여/부족 (MW)': ([p - a for p, a in zip(pv_power[:n_days*24], aidc_power[:n_days*24])], 'RdBu'),
+                }
+                
+                # HESS SOC도 있으면 추가
+                hess_soc_ts = dcbus_data_stat.get('bess_soc', [])
+                if len(hess_soc_ts) >= n_days * 24:
+                    heatmap_vars['HESS SoC (%)'] = ([v * 100 for v in hess_soc_ts[:n_days*24]], 'Greens')
+                
+                hm_select = st.selectbox(
+                    "히트맵 변수 선택", list(heatmap_vars.keys()),
+                    key="heatmap_var_select"
+                )
+                
+                hm_series, hm_cmap = heatmap_vars[hm_select]
+                mat = _build_heatmap_matrix(hm_series, n_days)
+                
+                # 잉여/부족은 0 기준 대칭 컬러스케일
+                zmid = 0 if '잉여' in hm_select else None
+                
+                day_labels = [f"Day {d+1}" for d in range(n_days)]
+                hour_labels = [f"{h:02d}:00" for h in range(24)]
+                
+                fig_hm = go.Figure(data=go.Heatmap(
+                    z=mat, x=hour_labels, y=day_labels,
+                    colorscale=hm_cmap, zmid=zmid,
+                    colorbar=dict(title=hm_select),
+                    hovertemplate='%{y}, %{x}<br>%{z:.1f}<extra></extra>'
+                ))
+                fig_hm.update_layout(
+                    title=f"{hm_select} — 24시간 × {n_days}일 패턴",
+                    xaxis_title="시간 (Hour of Day)",
+                    yaxis_title="일차",
+                    height=max(300, n_days * 28 + 150),
+                    template='plotly_white',
+                    yaxis=dict(autorange='reversed')
+                )
+                st.plotly_chart(fig_hm, use_container_width=True)
+                
+                # 시간대별 평균 프로파일 (일 평균)
+                col_hm1, col_hm2 = st.columns(2)
+                with col_hm1:
+                    hourly_avg = mat.mean(axis=0)
+                    fig_avg = go.Figure()
+                    fig_avg.add_trace(go.Bar(
+                        x=hour_labels, y=hourly_avg,
+                        marker_color='#f59e0b' if 'PV' in hm_select else '#3b82f6',
+                        name='시간대별 평균'
+                    ))
+                    fig_avg.update_layout(
+                        title=f"시간대별 평균 {hm_select}",
+                        height=300, template='plotly_white',
+                        xaxis_title="시간", yaxis_title=hm_select
+                    )
+                    st.plotly_chart(fig_avg, use_container_width=True)
+                
+                with col_hm2:
+                    daily_avg = mat.mean(axis=1)
+                    fig_daily = go.Figure()
+                    fig_daily.add_trace(go.Bar(
+                        x=day_labels, y=daily_avg,
+                        marker_color='#10b981',
+                        name='일별 평균'
+                    ))
+                    fig_daily.update_layout(
+                        title=f"일별 평균 {hm_select}",
+                        height=300, template='plotly_white',
+                        xaxis_title="일차", yaxis_title=hm_select
+                    )
+                    st.plotly_chart(fig_daily, use_container_width=True)
         else:
             st.info("시뮬레이션을 먼저 실행해주세요.")
         
