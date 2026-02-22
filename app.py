@@ -52,6 +52,123 @@ if 'simulation_data' not in st.session_state:
 if 'weather_data' not in st.session_state:
     st.session_state.weather_data = None
 
+# 다크 네온 테마 CSS 적용
+st.markdown("""
+<style>
+    /* 메인 배경 */
+    .stApp {
+        background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+        color: #ffffff;
+    }
+    
+    /* 사이드바 스타일링 */
+    .css-1d391kg {
+        background-color: #0f0f23 !important;
+    }
+    .css-12w0qpk {
+        background-color: #0f0f23 !important;
+    }
+    
+    /* 메트릭 카드 글로우 효과 */
+    [data-testid="metric-container"] {
+        background: rgba(26, 26, 46, 0.8);
+        border: 1px solid #00f0ff;
+        border-radius: 10px;
+        padding: 1rem;
+        box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+    }
+    
+    /* 메트릭 값 네온 효과 */
+    [data-testid="metric-container"] > div:first-child {
+        color: #00f0ff !important;
+        text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        font-weight: bold;
+    }
+    
+    /* 탭 스타일링 */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: rgba(26, 26, 46, 0.8);
+        border-radius: 10px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        color: #ffffff;
+        border-radius: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: rgba(0, 240, 255, 0.1);
+        box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: rgba(0, 240, 255, 0.2) !important;
+        color: #00f0ff !important;
+        box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+    }
+    
+    /* 슬라이더 네온 스타일 */
+    .stSlider > div > div > div > div {
+        background: linear-gradient(90deg, #ff00ff, #00f0ff);
+    }
+    
+    /* 버튼 네온 효과 */
+    .stButton > button {
+        background: linear-gradient(45deg, #00f0ff, #ff00ff);
+        border: none;
+        border-radius: 8px;
+        color: white;
+        font-weight: bold;
+        box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        box-shadow: 0 0 25px rgba(255, 0, 255, 0.6);
+        transform: translateY(-2px);
+    }
+    
+    /* 선택박스 스타일 */
+    .stSelectbox > div > div {
+        background-color: rgba(26, 26, 46, 0.8);
+        border: 1px solid #00f0ff;
+        border-radius: 8px;
+        color: #ffffff;
+    }
+    
+    /* 제목 네온 효과 */
+    h1, h2, h3 {
+        color: #ffffff !important;
+        text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    }
+    
+    /* 컨테이너 글로우 효과 */
+    .element-container {
+        background: rgba(26, 26, 46, 0.3);
+        border-radius: 8px;
+        padding: 0.5rem;
+    }
+    
+    /* 데이터프레임 스타일링 */
+    .stDataFrame {
+        background-color: rgba(26, 26, 46, 0.8);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
+    }
+    
+    /* 체크박스 네온 효과 */
+    .stCheckbox > label {
+        color: #ffffff !important;
+    }
+    
+    .stCheckbox input:checked + span {
+        background-color: #00f0ff !important;
+        box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    }
+</style>
+""", unsafe_allow_html=True)
+
 
 @st.cache_data
 def load_weather_data():
@@ -437,8 +554,209 @@ def display_results():
         display_references()
 
 
+def display_energy_flow_sankey(data, hour_idx):
+    """에너지 흐름 Sankey 다이어그램 표시"""
+    
+    # 데이터 추출 (해당 시간 인덱스)
+    pv_data = _safe_dict(data['pv'])
+    aidc_data = _safe_dict(data['aidc'])
+    dcbus_data = _safe_dict(data['dcbus'])
+    hess_df = data['hess']
+    h2_df = data['h2']
+    grid_df = data['grid']
+    
+    # 해당 시점의 전력값 추출 (MW)
+    pv_power = pv_data['power_mw'][hour_idx] if hour_idx < len(pv_data['power_mw']) else 0
+    aidc_power = aidc_data['total_power_mw'][hour_idx] if hour_idx < len(aidc_data['total_power_mw']) else 0
+    
+    # HESS, H2, Grid 데이터 (DataFrame에서 추출)
+    if hour_idx < len(hess_df):
+        hess_charge = hess_df.iloc[hour_idx]['charge_mw'] if 'charge_mw' in hess_df.columns else 0
+        hess_discharge = hess_df.iloc[hour_idx]['discharge_mw'] if 'discharge_mw' in hess_df.columns else 0
+    else:
+        hess_charge, hess_discharge = 0, 0
+    
+    if hour_idx < len(h2_df):
+        h2_electrolyzer = h2_df.iloc[hour_idx]['electrolyzer_mw'] if 'electrolyzer_mw' in h2_df.columns else 0
+        h2_fuelcell = h2_df.iloc[hour_idx]['fuelcell_mw'] if 'fuelcell_mw' in h2_df.columns else 0
+    else:
+        h2_electrolyzer, h2_fuelcell = 0, 0
+    
+    if hour_idx < len(grid_df):
+        grid_import = max(0, grid_df.iloc[hour_idx]['import_mw']) if 'import_mw' in grid_df.columns else 0
+        grid_export = max(0, grid_df.iloc[hour_idx]['export_mw']) if 'export_mw' in grid_df.columns else 0
+    else:
+        grid_import, grid_export = 0, 0
+    
+    # DC Bus로 들어오는/나가는 전력 계산
+    dcbus_in = pv_power + hess_discharge + h2_fuelcell + grid_import
+    dcbus_out = aidc_power + hess_charge + h2_electrolyzer + grid_export
+    
+    # Sankey 노드 정의 (네온 색상)
+    node_labels = [
+        "PV", "DC Bus", "AIDC", "HESS", "H₂ System", "Grid", "Wind (Future)"
+    ]
+    
+    node_colors = [
+        "#ffff00",   # PV - 노란 네온
+        "#ffffff",   # DC Bus - 화이트
+        "#ff0040",   # AIDC - 빨강 네온  
+        "#00f0ff",   # HESS - 시안
+        "#39ff14",   # H2 - 네온그린
+        "#ff00ff",   # Grid - 마젠타
+        "#ffd700"    # Wind - 골드
+    ]
+    
+    # Sankey 링크 정의 (소스, 타겟, 값)
+    source_nodes = []
+    target_nodes = []
+    values = []
+    link_colors = []
+    
+    # PV → DC Bus
+    if pv_power > 0.1:
+        source_nodes.append(0)  # PV
+        target_nodes.append(1)  # DC Bus  
+        values.append(pv_power)
+        link_colors.append("rgba(255, 255, 0, 0.4)")
+    
+    # DC Bus → AIDC
+    if aidc_power > 0.1:
+        source_nodes.append(1)  # DC Bus
+        target_nodes.append(2)  # AIDC
+        values.append(aidc_power)
+        link_colors.append("rgba(255, 0, 64, 0.4)")
+    
+    # DC Bus → HESS (충전)
+    if hess_charge > 0.1:
+        source_nodes.append(1)  # DC Bus
+        target_nodes.append(3)  # HESS
+        values.append(hess_charge)
+        link_colors.append("rgba(0, 240, 255, 0.4)")
+    
+    # HESS → DC Bus (방전)
+    if hess_discharge > 0.1:
+        source_nodes.append(3)  # HESS
+        target_nodes.append(1)  # DC Bus
+        values.append(hess_discharge)
+        link_colors.append("rgba(0, 240, 255, 0.4)")
+    
+    # DC Bus → H₂ System (전기분해)
+    if h2_electrolyzer > 0.1:
+        source_nodes.append(1)  # DC Bus
+        target_nodes.append(4)  # H₂ System
+        values.append(h2_electrolyzer)
+        link_colors.append("rgba(57, 255, 20, 0.4)")
+    
+    # H₂ System → DC Bus (연료전지)
+    if h2_fuelcell > 0.1:
+        source_nodes.append(4)  # H₂ System  
+        target_nodes.append(1)  # DC Bus
+        values.append(h2_fuelcell)
+        link_colors.append("rgba(57, 255, 20, 0.4)")
+    
+    # Grid ↔ DC Bus (양방향)
+    if grid_import > 0.1:
+        source_nodes.append(5)  # Grid
+        target_nodes.append(1)  # DC Bus
+        values.append(grid_import)  
+        link_colors.append("rgba(255, 0, 255, 0.4)")
+        
+    if grid_export > 0.1:
+        source_nodes.append(1)  # DC Bus
+        target_nodes.append(5)  # Grid
+        values.append(grid_export)
+        link_colors.append("rgba(255, 0, 255, 0.4)")
+    
+    # Sankey 다이어그램 생성
+    fig = go.Figure(data=[go.Sankey(
+        node=dict(
+            pad=15,
+            thickness=20,
+            line=dict(color="black", width=2),
+            label=node_labels,
+            color=node_colors
+        ),
+        link=dict(
+            source=source_nodes,
+            target=target_nodes, 
+            value=values,
+            color=link_colors
+        )
+    )])
+    
+    fig.update_layout(
+        title=f"에너지 흐름 (시간: {hour_idx:02d}:00)",
+        font_size=12,
+        height=500,
+        template='plotly_dark'
+    )
+    
+    # 현재 전력값들을 메트릭으로 표시
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.metric("🌞 PV", f"{pv_power:.1f} MW", 
+                 delta=None if hour_idx == 0 else f"{pv_power - pv_data['power_mw'][max(0, hour_idx-1)]:.1f}")
+    
+    with col2:
+        st.metric("🖥️ AIDC", f"{aidc_power:.1f} MW",
+                 delta=None if hour_idx == 0 else f"{aidc_power - aidc_data['total_power_mw'][max(0, hour_idx-1)]:.1f}")
+    
+    with col3:
+        hess_net = hess_discharge - hess_charge
+        st.metric("🔋 HESS", f"{hess_net:+.1f} MW", 
+                 delta=f"{'충전' if hess_charge > hess_discharge else '방전'}")
+    
+    with col4:
+        h2_net = h2_fuelcell - h2_electrolyzer
+        st.metric("⚡ H₂", f"{h2_net:+.1f} MW",
+                 delta=f"{'발전' if h2_fuelcell > h2_electrolyzer else '전해'}")
+    
+    with col5:
+        grid_net = grid_export - grid_import
+        st.metric("🔌 Grid", f"{grid_net:+.1f} MW",
+                 delta=f"{'수출' if grid_export > grid_import else '수입'}")
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    st.markdown("---")  # 구분선
+
+
 def display_power_balance(data):
     """전력 균형 결과 표시"""
+    
+    # ⚡ 에너지 흐름 애니메이션 (Sankey 다이어그램)
+    st.subheader("⚡ 에너지 흐름 애니메이션")
+    
+    # 시뮬레이션 시간 길이 확인
+    pv_data_temp = _safe_dict(data['pv'])
+    sim_hours = len(pv_data_temp['power_mw'])
+    
+    # 시간 슬라이더
+    current_hour = st.slider(
+        "시뮬레이션 시간 선택",
+        min_value=0, max_value=sim_hours-1, value=0,
+        key="energy_flow_time_slider"
+    )
+    
+    # Play/Pause 버튼 (선택사항)
+    col1, col2, col3 = st.columns([1, 1, 8])
+    with col1:
+        if st.button("▶️ Play", key="play_btn"):
+            st.session_state.energy_flow_playing = True
+    with col2:
+        if st.button("⏸️ Pause", key="pause_btn"):
+            st.session_state.energy_flow_playing = False
+    
+    # 자동 재생 로직 (간단 구현)
+    if st.session_state.get('energy_flow_playing', False):
+        if current_hour < sim_hours - 1:
+            st.rerun()
+    
+    # 해당 시점의 데이터 추출
+    display_energy_flow_sankey(data, current_hour)
+    
     st.subheader("⚖️ 전력 공급 vs 수요")
     
     pv_data = _safe_dict(data['pv'])
@@ -489,6 +807,7 @@ def display_power_balance(data):
     fig.update_layout(
         height=600,
         showlegend=True,
+        template='plotly_dark',
         title_text="전력 균형 분석"
     )
     
@@ -579,7 +898,7 @@ def display_pv_results(data):
             ), row=2, col=1
         )
         
-        fig.update_layout(height=500, title="PV 성능 분석")
+        fig.update_layout(height=500, title="PV 성능 분석", template='plotly_dark')
         fig.update_xaxes(title_text="시간 (hour)", row=2, col=1)
         fig.update_yaxes(title_text="전력 (MW)", row=1, col=1)
         fig.update_yaxes(title_text="온도 (°C)", secondary_y=True, row=1, col=1)
@@ -651,7 +970,7 @@ def display_aidc_results(data):
             ), row=2, col=1
         )
         
-        fig.update_layout(height=500, title="AIDC 부하 분석")
+        fig.update_layout(height=500, title="AIDC 부하 분석", template='plotly_dark')
         fig.update_xaxes(title_text="시간 (hour)", row=2, col=1)
         fig.update_yaxes(title_text="전력 (MW)")
         
@@ -723,6 +1042,7 @@ def display_aidc_results(data):
     fig_zoom.update_layout(
         height=350,
         title=f"AIDC 부하 분단위 프로파일 ({zoom_hour:02d}:00-{zoom_hour:02d}:59)",
+        template='plotly_dark',
         xaxis_title="분 (minute)",
         yaxis_title="전력 (MW)",
         showlegend=False
@@ -810,7 +1130,7 @@ def display_dcbus_results(data):
             ), row=3, col=1
         )
     
-    fig.update_layout(height=700, title="DC Bus 전력 흐름")
+    fig.update_layout(height=700, title="DC Bus 전력 흐름", template='plotly_dark')
     fig.update_xaxes(title_text="시간 (hour)", row=3, col=1)
     fig.update_yaxes(title_text="전력 (MW)")
     
@@ -887,6 +1207,7 @@ def display_ems_results(data):
     fig.update_layout(
         barmode='stack', height=450,
         title="AIDC 공급원 구성 (Stacked)",
+        template='plotly_dark',
         xaxis_title="시간", yaxis_title="전력 (MW)"
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -907,6 +1228,7 @@ def display_ems_results(data):
     fig2.update_layout(
         barmode='stack', height=350,
         title="잉여 전력 배분",
+        template='plotly_dark',
         xaxis_title="시간", yaxis_title="전력 (MW)"
     )
     st.plotly_chart(fig2, use_container_width=True)
@@ -966,7 +1288,7 @@ def display_carbon_results(data):
             line=dict(color=COLOR_PALETTE['carbon'])
         ))
         fig_ts.update_layout(title="누적 탄소 배출/회피", height=400,
-                             xaxis_title="시간", yaxis_title="tCO₂")
+                             xaxis_title="시간", yaxis_title="tCO₂", template='plotly_dark')
         st.plotly_chart(fig_ts, use_container_width=True)
     
     # K-ETS / CBAM 분석
@@ -1035,7 +1357,7 @@ def display_economics_results(data):
         fig_cf.add_hline(y=base['capex_billion_krw'], line_dash="dash", line_color="gray",
                          annotation_text="CAPEX")
         fig_cf.update_layout(title="연간 현금흐름 (억원)", height=400,
-                             xaxis_title="연차", yaxis_title="억원")
+                             xaxis_title="연차", yaxis_title="억원", template='plotly_dark')
         st.plotly_chart(fig_cf, use_container_width=True)
     
     # Monte Carlo
@@ -1081,7 +1403,7 @@ def display_economics_results(data):
         ))
     fig_tornado.update_layout(
         title=f"IRR 민감도 (Base: {base['irr_pct']:.1f}%)",
-        xaxis_title="IRR 변동 (%p)", barmode='overlay', height=400
+        xaxis_title="IRR 변동 (%p)", barmode='overlay', height=400, template='plotly_dark'
     )
     st.plotly_chart(fig_tornado, use_container_width=True)
     
@@ -1215,7 +1537,7 @@ def display_hess_results(data):
         title="HESS 레이어별 SOC",
         labels={'x': '레이어', 'y': 'SOC (%)'}
     )
-    fig.update_layout(height=400)
+    fig.update_layout(height=400, template='plotly_dark')
     st.plotly_chart(fig, use_container_width=True)
     
     # 시간별 운전 차트
@@ -1242,6 +1564,7 @@ def display_hess_results(data):
     fig.update_layout(
         title="HESS 전력 및 SOC",
         xaxis_title="시간",
+        template='plotly_dark',
         yaxis_title="전력 (MW)",
         yaxis2=dict(
             title="SOC (%)",
@@ -1359,6 +1682,7 @@ def display_h2_results(data):
         fig.update_layout(
             title="H₂ 시스템 운전 이력",
             xaxis_title="시간",
+            template='plotly_dark',
             yaxis_title="전력 (MW)",
             height=400
         )
@@ -1457,6 +1781,7 @@ def display_grid_results(data):
         fig.update_layout(
             title="그리드 거래 전력 (양수: 구매, 음수: 판매)",
             xaxis_title="시간",
+            template='plotly_dark',
             yaxis_title="전력 (MW)",
             height=400
         )
@@ -1476,7 +1801,8 @@ def display_grid_results(data):
         
         fig2.update_layout(
             title="시간대별 SMP 가격",
-            xaxis_title="시간", 
+            xaxis_title="시간",
+            template='plotly_dark', 
             yaxis_title="SMP 가격 (₩/MWh)",
             height=400
         )
@@ -1608,7 +1934,7 @@ def display_statistics(data):
                                          name='📤 그리드 수출', line=dict(color='#22c55e', dash='dash')))
             
             fig.update_layout(title="시간별 전력 흐름", xaxis_title="시간 (h)", 
-                            yaxis_title="전력 (MW)", height=450, template='plotly_white')
+                            yaxis_title="전력 (MW)", height=450, template='plotly_dark')
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("시뮬레이션을 먼저 실행해주세요.")
@@ -1620,14 +1946,16 @@ def display_statistics(data):
         with col1:
             if len(pv_power) > 0:
                 fig = px.histogram(x=pv_power, nbins=30, title="PV 발전량 분포 (MW)",
-                                   labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#f59e0b'])
+                                   labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#f59e0b'],
+                                   template='plotly_dark')
                 fig.update_layout(height=300)
                 st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             if len(aidc_power) > 0:
                 fig = px.histogram(x=aidc_power, nbins=30, title="AIDC 부하 분포 (MW)",
-                                   labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#ef4444'])
+                                   labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#ef4444'],
+                                   template='plotly_dark')
                 fig.update_layout(height=300)
                 st.plotly_chart(fig, use_container_width=True)
         
@@ -1718,6 +2046,7 @@ def display_policy_simulator():
     fig.update_layout(
         title="탄소가격 × REC 가격 → IRR (%)",
         xaxis_title="REC 가격 (₩/MWh)",
+        template='plotly_dark',
         yaxis_title="K-ETS 탄소가격 (₩/tCO₂)",
         height=400)
     st.plotly_chart(fig, use_container_width=True)
@@ -1775,7 +2104,7 @@ def display_industry_model():
     fig.add_trace(go.Bar(name="연간 수익 (억)", x=names,
                          y=[c["annual_revenue_billion_krw"] for c in all_csp]))
     fig.update_layout(barmode="group", height=400,
-                      title="CSP별 CAPEX vs 연간 수익")
+                      title="CSP별 CAPEX vs 연간 수익", template='plotly_dark')
     st.plotly_chart(fig, use_container_width=True)
 
     # 스케일링 분석
@@ -1786,7 +2115,7 @@ def display_industry_model():
     fig2.add_trace(go.Scatter(x=caps, y=[s["irr_pct"] or 0 for s in scaling],
                               mode="lines+markers", name="IRR (%)"))
     fig2.update_layout(title="용량별 IRR", xaxis_title="용량 (MW)",
-                       yaxis_title="IRR (%)", height=350)
+                       yaxis_title="IRR (%)", height=350, template='plotly_dark')
     st.plotly_chart(fig2, use_container_width=True)
 
 
@@ -1832,7 +2161,7 @@ def display_investment_dashboard():
         fig_irr.add_vline(x=mc["irr_mean_pct"], line_dash="dash",
                           annotation_text=f"Mean: {mc['irr_mean_pct']:.1f}%")
         fig_irr.update_layout(title="IRR 분포", xaxis_title="IRR (%)",
-                              yaxis_title="빈도", height=350)
+                              yaxis_title="빈도", height=350, template='plotly_dark')
         st.plotly_chart(fig_irr, use_container_width=True)
 
     with col_b:
@@ -1843,7 +2172,7 @@ def display_investment_dashboard():
         fig_npv.add_vline(x=0, line_dash="solid", line_color="red",
                           annotation_text="BEP")
         fig_npv.update_layout(title="NPV 분포", xaxis_title="NPV (억원)",
-                              yaxis_title="빈도", height=350)
+                              yaxis_title="빈도", height=350, template='plotly_dark')
         st.plotly_chart(fig_npv, use_container_width=True)
 
     st.info(f"P(NPV>0) = **{mc['prob_positive_npv_pct']:.1f}%** | "
@@ -1887,7 +2216,7 @@ def display_investment_dashboard():
         textposition="auto"))
     fig_sub.update_layout(title="보조금 비율별 IRR",
                           xaxis_title="보조금", yaxis_title="IRR (%)",
-                          height=350)
+                          height=350, template='plotly_dark')
     st.plotly_chart(fig_sub, use_container_width=True)
 
 
