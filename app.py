@@ -598,123 +598,80 @@ def display_static_energy_flow_sankey(data):
     # Curtailment (출력제한)
     curtailment_total = max(0, pv_total - aidc_total - hess_charge_total - h2_electrolyzer_total - grid_export_total) * 0.05
     
-    # Sankey 노드 정의 (좌→우 배치, GDI 스타일 색상)
+    # === Sankey 다이어그램 (GDI 스타일: 깔끔한 좌→우, 세련된 색상) ===
+    
+    # 노드: 0-3 좌측(소스), 4 중앙(DC Bus), 5-9 우측(싱크)
     node_labels = [
-        # 좌측 (에너지 소스)
-        "☀️ Solar PV",           # 0
-        "🔋 HESS 방전",          # 1  
-        "💧 H₂ Fuel Cell",       # 2
-        "🔌 Grid Import",        # 3
-        # 중앙 (DC Bus)
-        "⚡ DC Bus",            # 4
-        # 우측 (에너지 싱크)
-        "🖥️ AIDC",             # 5
-        "🔋 HESS 충전",          # 6
-        "💧 H₂ 전해조",          # 7
-        "📤 Grid Export",        # 8
-        "❌ Curtailment"        # 9
+        "Solar PV",        # 0
+        "HESS 방전",       # 1
+        "H₂ Fuel Cell",   # 2
+        "Grid Import",     # 3
+        "DC Bus",          # 4
+        "AIDC",            # 5
+        "HESS 충전",       # 6
+        "H₂ 전해조",       # 7
+        "Grid Export",     # 8
+        "Curtailment",     # 9
     ]
     
-    # GDI 스타일 노드 컬러
+    # 세련된 GDI 톤 (파스텔 + 다크 배경 조화)
     node_colors = [
-        "#ffdd00",    # PV - 골드
-        "#00d4ff",    # HESS 방전 - 시안
-        "#34d399",    # H2 Fuel Cell - 연한 그린
-        "#a78bfa",    # Grid Import - 라벤더
-        "#ffffff",    # DC Bus - 화이트
-        "#ff4060",    # AIDC - 연한 빨강
-        "#00d4ff",    # HESS 충전 - 시안
-        "#34d399",    # H2 전해조 - 연한 그린
-        "#a78bfa",    # Grid Export - 라벤더
-        "#999999"     # Curtailment - 그레이
+        "#e6a817",  # PV — 머스타드 골드
+        "#2dd4bf",  # HESS 방전 — 틸
+        "#4ade80",  # H2 FC — 소프트 그린
+        "#818cf8",  # Grid Import — 인디고
+        "#f8fafc",  # DC Bus — 화이트
+        "#f87171",  # AIDC — 소프트 레드
+        "#2dd4bf",  # HESS 충전 — 틸
+        "#4ade80",  # H2 전해조 — 소프트 그린
+        "#818cf8",  # Grid Export — 인디고
+        "#64748b",  # Curtailment — 슬레이트
     ]
     
-    # Sankey 링크 정의 (소스, 타겟, 값)
-    source_nodes = []
-    target_nodes = []
-    values = []
-    link_colors = []
+    # 링크 구성 (값 > 0.1 인 것만)
+    links = [
+        (0, 4, pv_total,              "rgba(230,168,23,0.35)"),
+        (1, 4, hess_discharge_total,  "rgba(45,212,191,0.35)"),
+        (2, 4, h2_fuelcell_total,     "rgba(74,222,128,0.35)"),
+        (3, 4, grid_import_total,     "rgba(129,140,248,0.35)"),
+        (4, 5, aidc_total,            "rgba(248,113,113,0.35)"),
+        (4, 6, hess_charge_total,     "rgba(45,212,191,0.35)"),
+        (4, 7, h2_electrolyzer_total, "rgba(74,222,128,0.35)"),
+        (4, 8, grid_export_total,     "rgba(129,140,248,0.35)"),
+        (4, 9, curtailment_total,     "rgba(100,116,139,0.35)"),
+    ]
     
-    # 좌측 → DC Bus (에너지 공급)
-    if pv_total > 0.1:
-        source_nodes.append(0)  # Solar PV
-        target_nodes.append(4)  # DC Bus
-        values.append(pv_total)
-        link_colors.append("rgba(255, 221, 0, 0.6)")
+    source_nodes = [s for s, t, v, c in links if v > 0.1]
+    target_nodes = [t for s, t, v, c in links if v > 0.1]
+    values =       [v for s, t, v, c in links if v > 0.1]
+    link_colors =  [c for s, t, v, c in links if v > 0.1]
     
-    if hess_discharge_total > 0.1:
-        source_nodes.append(1)  # HESS 방전
-        target_nodes.append(4)  # DC Bus
-        values.append(hess_discharge_total)
-        link_colors.append("rgba(0, 212, 255, 0.6)")
-    
-    if h2_fuelcell_total > 0.1:
-        source_nodes.append(2)  # H₂ Fuel Cell
-        target_nodes.append(4)  # DC Bus
-        values.append(h2_fuelcell_total)
-        link_colors.append("rgba(52, 211, 153, 0.6)")
-    
-    if grid_import_total > 0.1:
-        source_nodes.append(3)  # Grid Import
-        target_nodes.append(4)  # DC Bus
-        values.append(grid_import_total)
-        link_colors.append("rgba(167, 139, 250, 0.6)")
-    
-    # DC Bus → 우측 (에너지 소비/저장)
-    if aidc_total > 0.1:
-        source_nodes.append(4)  # DC Bus
-        target_nodes.append(5)  # AIDC
-        values.append(aidc_total)
-        link_colors.append("rgba(255, 64, 96, 0.6)")
-    
-    if hess_charge_total > 0.1:
-        source_nodes.append(4)  # DC Bus
-        target_nodes.append(6)  # HESS 충전
-        values.append(hess_charge_total)
-        link_colors.append("rgba(0, 212, 255, 0.6)")
-    
-    if h2_electrolyzer_total > 0.1:
-        source_nodes.append(4)  # DC Bus
-        target_nodes.append(7)  # H₂ 전해조
-        values.append(h2_electrolyzer_total)
-        link_colors.append("rgba(52, 211, 153, 0.6)")
-    
-    if grid_export_total > 0.1:
-        source_nodes.append(4)  # DC Bus
-        target_nodes.append(8)  # Grid Export
-        values.append(grid_export_total)
-        link_colors.append("rgba(167, 139, 250, 0.6)")
-    
-    if curtailment_total > 0.1:
-        source_nodes.append(4)  # DC Bus
-        target_nodes.append(9)  # Curtailment
-        values.append(curtailment_total)
-        link_colors.append("rgba(153, 153, 153, 0.6)")
-    
-    # Sankey 다이어그램 생성
     fig = go.Figure(data=[go.Sankey(
+        arrangement="snap",
         node=dict(
-            pad=15,
-            thickness=20,
-            line=dict(color="rgba(255,255,255,0.2)", width=1),
+            pad=30,
+            thickness=25,
+            line=dict(color="rgba(255,255,255,0.08)", width=0.5),
             label=node_labels,
             color=node_colors,
-            x=[0.1, 0.1, 0.1, 0.1, 0.5, 0.9, 0.9, 0.9, 0.9, 0.9],  # 좌→중앙→우 배치
-            y=[0.9, 0.7, 0.5, 0.3, 0.6, 0.9, 0.7, 0.5, 0.3, 0.1]   # 수직 위치
+            x=[0.01, 0.01, 0.01, 0.01,  0.45,  0.99, 0.99, 0.99, 0.99, 0.99],
+            y=[0.2,  0.4,  0.6,  0.8,   0.5,   0.1,  0.35, 0.55, 0.75, 0.95],
         ),
         link=dict(
             source=source_nodes,
-            target=target_nodes, 
+            target=target_nodes,
             value=values,
-            color=link_colors
-        )
+            color=link_colors,
+        ),
     )])
     
     fig.update_layout(
-        title="에너지 흐름 요약 (전체 시뮬레이션 기간)",
-        font_size=12,
-        height=500,
-        template='plotly_dark'
+        title=dict(text="에너지 흐름 요약 (전체 시뮬레이션 기간)", font=dict(size=14, color="#94a3b8")),
+        font=dict(size=11, color="#cbd5e1"),
+        height=450,
+        margin=dict(l=10, r=10, t=40, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     
     # 요약 메트릭 표시
