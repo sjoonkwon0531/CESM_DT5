@@ -115,7 +115,7 @@ def create_main_dashboard():
         
         gpu_count = st.slider(
             "GPU 수량",
-            min_value=10000, max_value=100000, value=50000, step=5000,
+            min_value=500, max_value=100000, value=50000, step=500,
             format="%d",
             key="gpu_count"
         )
@@ -491,24 +491,29 @@ def display_static_energy_flow_sankey(data):
         conv_loss = max(0, conv_loss)
     
     # --- Sankey 구성 ---
+    # 라벨에 절대치 + 비중 표시
+    def _lbl(name, val, ref):
+        pct = (val / ref * 100) if ref > 0 else 0
+        return f"{name}<br>{val:,.0f} MWh ({pct:.1f}%)"
+    
     # 0-3: 소스(좌), 4: DC Bus(중), 5-10: 싱크(우)
     labels = [
-        "☀️ Solar PV",     # 0
-        "🔋 HESS 방전",    # 1
-        "💧 H₂ FC",       # 2
-        "🔌 Grid 수입",    # 3
-        "⚡ DC Bus",       # 4
-        "🖥️ AIDC",        # 5
-        "🔋 HESS 충전",    # 6
-        "💧 H₂ 전해조",    # 7
-        "🔌 Grid 수출",    # 8
-        "⛔ Curtailment",  # 9
-        "🔥 변환 손실",     # 10
+        _lbl("☀️ Solar PV", pv, total_in),
+        _lbl("🔋 HESS 방전", bess_disch, total_in),
+        _lbl("💧 H₂ FC", h2_fc, total_in),
+        _lbl("🔌 Grid 수입", grid_imp, total_in),
+        f"⚡ DC Bus<br>{total_in:,.0f} MWh",
+        _lbl("🖥️ AIDC", aidc, total_in),
+        _lbl("🔋 HESS 충전", bess_chg, total_in),
+        _lbl("💧 H₂ 전해조", h2_elec, total_in),
+        _lbl("🔌 Grid 수출", grid_exp, total_in),
+        _lbl("⛔ Curtailment", curtail, total_in),
+        _lbl("🔥 변환 손실", conv_loss, total_in),
     ]
     
     colors = [
         "#d97706", "#0d9488", "#059669", "#4f46e5",  # 소스
-        "#334155",                                     # DC Bus
+        "#1e40af",                                     # DC Bus — 진한 블루
         "#dc2626", "#0d9488", "#059669", "#4f46e5",  # 싱크
         "#94a3b8", "#78716c",                          # Curtail, 손실
     ]
@@ -534,7 +539,7 @@ def display_static_energy_flow_sankey(data):
         textfont=dict(size=13, color="#1e293b", family="Arial, sans-serif"),
         node=dict(
             pad=30,
-            thickness=22,
+            thickness=28,
             line=dict(color="#cbd5e1", width=1),
             label=labels,
             color=colors,
@@ -1730,7 +1735,7 @@ def display_statistics(data):
         col1, col2, col3, col4 = st.columns(4)
         
         pv_power = pv_data.get('power_mw', [])
-        aidc_power = aidc_data.get('power_mw', [])
+        aidc_power = aidc_data.get('total_power_mw', aidc_data.get('power_mw', []))
         
         with col1:
             if len(pv_power) > 0:
@@ -1768,15 +1773,36 @@ def display_statistics(data):
             fig.add_trace(go.Scatter(x=hours, y=pv_power, name='☀️ PV 발전', line=dict(color='#f59e0b')))
             fig.add_trace(go.Scatter(x=hours, y=aidc_power, name='🖥️ AIDC 부하', line=dict(color='#ef4444')))
             
-            if isinstance(grid_df, pd.DataFrame) and 'import_mw' in grid_df.columns:
-                fig.add_trace(go.Scatter(x=hours[:len(grid_df)], y=grid_df['import_mw'].tolist(), 
-                                         name='📥 그리드 수입', line=dict(color='#3b82f6', dash='dash')))
-            if isinstance(grid_df, pd.DataFrame) and 'export_mw' in grid_df.columns:
-                fig.add_trace(go.Scatter(x=hours[:len(grid_df)], y=grid_df['export_mw'].tolist(), 
-                                         name='📤 그리드 수출', line=dict(color='#22c55e', dash='dash')))
+            # DC Bus 데이터에서 추가 시계열
+            dcbus_data_stat = _safe_dict(data.get('dcbus', {}))
+            bess_disch_ts = dcbus_data_stat.get('bess_discharge_mw', [])
+            bess_chg_ts = dcbus_data_stat.get('bess_charge_mw', [])
+            grid_imp_ts = dcbus_data_stat.get('grid_import_mw', [])
+            grid_exp_ts = dcbus_data_stat.get('grid_export_mw', [])
+            curtail_ts = dcbus_data_stat.get('curtailment_mw', [])
             
-            fig.update_layout(title="시간별 전력 흐름", xaxis_title="시간 (h)", 
-                            yaxis_title="전력 (MW)", height=450, template='plotly_white')
+            if len(bess_disch_ts) > 0:
+                fig.add_trace(go.Scatter(x=hours[:len(bess_disch_ts)], y=bess_disch_ts,
+                                         name='🔋 HESS 방전', line=dict(color='#0d9488', dash='dot')))
+            if len(bess_chg_ts) > 0:
+                bess_chg_neg = [-v for v in bess_chg_ts]
+                fig.add_trace(go.Scatter(x=hours[:len(bess_chg_neg)], y=bess_chg_neg,
+                                         name='🔋 HESS 충전', line=dict(color='#0d9488', dash='dash')))
+            if len(grid_imp_ts) > 0:
+                fig.add_trace(go.Scatter(x=hours[:len(grid_imp_ts)], y=grid_imp_ts,
+                                         name='📥 Grid 수입', line=dict(color='#3b82f6', dash='dash')))
+            if len(grid_exp_ts) > 0:
+                grid_exp_neg = [-v for v in grid_exp_ts]
+                fig.add_trace(go.Scatter(x=hours[:len(grid_exp_neg)], y=grid_exp_neg,
+                                         name='📤 Grid 수출', line=dict(color='#22c55e', dash='dash')))
+            if len(curtail_ts) > 0:
+                fig.add_trace(go.Scatter(x=hours[:len(curtail_ts)], y=curtail_ts,
+                                         name='⛔ Curtailment', line=dict(color='#94a3b8', dash='dot'),
+                                         fill='tozeroy', fillcolor='rgba(148,163,184,0.1)'))
+            
+            fig.update_layout(title="시간별 전력 흐름 (전체 시스템)", xaxis_title="시간 (h)", 
+                            yaxis_title="전력 (MW)", height=500, template='plotly_white',
+                            legend=dict(orientation="h", yanchor="bottom", y=-0.25))
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("시뮬레이션을 먼저 실행해주세요.")
