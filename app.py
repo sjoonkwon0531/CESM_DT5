@@ -721,12 +721,14 @@ def display_static_energy_flow_sankey(data):
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
+        pv_len = len(pv_data.get('power_mw', [])) or 1
         st.metric("☀️ PV 발전", f"{pv_total:.0f} MWh", 
-                 delta=f"평균: {pv_total/len(pv_data['power_mw']):.1f} MW" if pv_data['power_mw'] else "")
+                 delta=f"평균: {pv_total/pv_len:.1f} MW")
     
     with col2:
+        aidc_len = len(aidc_data.get('total_power_mw', aidc_data.get('power_mw', []))) or 1
         st.metric("🖥️ AIDC 소비", f"{aidc_total:.0f} MWh",
-                 delta=f"평균: {aidc_total/len(aidc_data['total_power_mw']):.1f} MW" if aidc_data['total_power_mw'] else "")
+                 delta=f"평균: {aidc_total/aidc_len:.1f} MW")
     
     with col3:
         hess_net = hess_discharge_total - hess_charge_total
