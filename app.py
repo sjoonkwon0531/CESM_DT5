@@ -559,20 +559,41 @@ def display_static_energy_flow_sankey(data):
     dcbus_data = _safe_dict(data['dcbus'])
     
     # 전체 시뮬레이션 기간의 누적 에너지 계산 (MWh)
-    pv_total = sum(pv_data['power_mw']) if pv_data['power_mw'] else 0
-    aidc_total = sum(aidc_data['total_power_mw']) if aidc_data['total_power_mw'] else 0
+    import pandas as pd
+    
+    def _safe_sum(d, key):
+        """Safely sum a list, Series, or array from a dict."""
+        val = d.get(key, [])
+        if val is None:
+            return 0
+        if isinstance(val, pd.Series):
+            return float(val.sum())
+        if isinstance(val, (list, tuple)) and len(val) > 0:
+            return float(sum(val))
+        try:
+            return float(sum(val))
+        except (TypeError, ValueError):
+            return 0
+    
+    pv_total = _safe_sum(pv_data, 'power_mw')
+    aidc_total = _safe_sum(aidc_data, 'total_power_mw') or _safe_sum(aidc_data, 'power_mw')
     
     # HESS 데이터
-    hess_charge_total = sum(dcbus_data['bess_charge_mw']) if dcbus_data.get('bess_charge_mw') else 0
-    hess_discharge_total = sum(dcbus_data['bess_discharge_mw']) if dcbus_data.get('bess_discharge_mw') else 0
+    hess_charge_total = _safe_sum(dcbus_data, 'bess_charge_mw')
+    hess_discharge_total = _safe_sum(dcbus_data, 'bess_discharge_mw')
     
     # Grid 데이터  
-    grid_import_total = sum(dcbus_data['grid_import_mw']) if dcbus_data.get('grid_import_mw') else 0
-    grid_export_total = sum(dcbus_data['grid_export_mw']) if dcbus_data.get('grid_export_mw') else 0
+    grid_import_total = _safe_sum(dcbus_data, 'grid_import_mw')
+    grid_export_total = _safe_sum(dcbus_data, 'grid_export_mw')
     
-    # H2 시스템 데이터 (간단화)
-    h2_electrolyzer_total = pv_total * 0.1  # PV의 10%를 H2 전해조로 가정
-    h2_fuelcell_total = h2_electrolyzer_total * 0.3  # 저장된 H2의 30%를 연료전지로 가정
+    # H2 시스템 데이터
+    h2_data = data.get('h2', pd.DataFrame())
+    if isinstance(h2_data, pd.DataFrame) and not h2_data.empty:
+        h2_electrolyzer_total = float(h2_data['electrolyzer_mw'].sum()) if 'electrolyzer_mw' in h2_data.columns else pv_total * 0.1
+        h2_fuelcell_total = float(h2_data['fuelcell_mw'].sum()) if 'fuelcell_mw' in h2_data.columns else h2_electrolyzer_total * 0.3
+    else:
+        h2_electrolyzer_total = pv_total * 0.1
+        h2_fuelcell_total = h2_electrolyzer_total * 0.3
     
     # Curtailment (출력제한)
     curtailment_total = max(0, pv_total - aidc_total - hess_charge_total - h2_electrolyzer_total - grid_export_total) * 0.05
