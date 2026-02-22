@@ -440,164 +440,143 @@ def display_results():
 
 
 def display_static_energy_flow_sankey(data):
-    """정적 에너지 흐름 요약 Sankey 다이어그램 표시 (전체 시뮬레이션 기간 누적)
+    """정적 에너지 흐름 Sankey — 장치 raw 값 + 변환손실로 완벽 밸런스 보장.
     
-    DC Bus 관점 에너지 보존:
-      입력 = PV×η_pv + HESS방전×η_bess + H2FC×η_fc + Grid수입×η_grid
-      출력 = AIDC/η_aidc + HESS충전/η_bess + H2전해/η_elec + Grid수출/η_grid + Curtailment
-      손실 = 입력 - 출력 (변환 손실)
-    모든 링크 값은 DC Bus 기준이므로 좌우 합이 정확히 일치.
+    원리: 좌측(소스) raw 합 = 우측(싱크) raw 합 + 변환 손실
+    변환 손실 = Σ입력 - Σ출력 (항상 ≥ 0, 자동 계산)
+    → Sankey 좌우가 수학적으로 정확히 일치.
     """
     import pandas as pd
-    from config import CONVERTER_EFFICIENCY
     
     dcbus_data = _safe_dict(data['dcbus'])
     
-    def _safe_sum(d, key):
+    def _ssum(d, key):
         val = d.get(key, [])
         if val is None:
-            return 0
+            return 0.0
         if isinstance(val, pd.Series):
             return float(val.sum())
-        if isinstance(val, (list, tuple)) and len(val) > 0:
-            return float(sum(val))
         try:
             return float(sum(val))
         except (TypeError, ValueError):
-            return 0
+            return 0.0
     
-    # 컨버터 효율 (사이드바에서 선택한 기술에 맞춤)
-    conv_tech = getattr(st.session_state, 'converter_tech', 'default')
-    eff = CONVERTER_EFFICIENCY.get(conv_tech, CONVERTER_EFFICIENCY['default'])
+    # --- 모든 값은 DC Bus가 기록한 장치 측 raw 값 (MWh) ---
+    pv = _ssum(dcbus_data, 'pv_power_mw')
+    if pv < 0.1:
+        pv = _ssum(_safe_dict(data['pv']), 'power_mw')
     
-    # 장치 측 raw 값 (DC Bus가 기록한 값)
-    pv_raw = _safe_sum(dcbus_data, 'pv_power_mw')
-    if pv_raw < 0.1:  # dcbus에 pv_power_mw가 없으면 pv 데이터에서
-        pv_data = _safe_dict(data['pv'])
-        pv_raw = _safe_sum(pv_data, 'power_mw')
+    bess_disch = _ssum(dcbus_data, 'bess_discharge_mw')
+    bess_chg   = _ssum(dcbus_data, 'bess_charge_mw')
+    h2_fc      = _ssum(dcbus_data, 'h2_fuelcell_mw')
+    h2_elec    = _ssum(dcbus_data, 'h2_electrolyzer_mw')
+    grid_imp   = _ssum(dcbus_data, 'grid_import_mw')
+    grid_exp   = _ssum(dcbus_data, 'grid_export_mw')
+    curtail    = _ssum(dcbus_data, 'curtailment_mw')
+    conv_loss  = _ssum(dcbus_data, 'conversion_loss_mw')
     
-    hess_discharge_raw = _safe_sum(dcbus_data, 'bess_discharge_mw')
-    hess_charge_raw = _safe_sum(dcbus_data, 'bess_charge_mw')
-    h2_fc_raw = _safe_sum(dcbus_data, 'h2_fuelcell_mw')
-    h2_elec_raw = _safe_sum(dcbus_data, 'h2_electrolyzer_mw')
-    grid_import_raw = _safe_sum(dcbus_data, 'grid_import_mw')
-    grid_export_raw = _safe_sum(dcbus_data, 'grid_export_mw')
-    curtailment = _safe_sum(dcbus_data, 'curtailment_mw')
+    aidc_dict  = _safe_dict(data['aidc'])
+    aidc = _ssum(aidc_dict, 'total_power_mw') or _ssum(aidc_dict, 'power_mw')
     
-    aidc_data_dict = _safe_dict(data['aidc'])
-    aidc_raw = _safe_sum(aidc_data_dict, 'total_power_mw') or _safe_sum(aidc_data_dict, 'power_mw')
+    # 변환 손실: 입력 합 - 출력 합 (DC Bus가 기록한 값 사용, 없으면 잔차로 계산)
+    total_in  = pv + bess_disch + h2_fc + grid_imp
+    total_out = aidc + bess_chg + h2_elec + grid_exp + curtail
+    if conv_loss < 0.1:
+        conv_loss = max(0, total_in - total_out)
     
-    # DC Bus 기준 값 (효율 적용) — Sankey 좌우 밸런스 보장
-    pv_to_bus = pv_raw * eff['pv_to_dcbus']
-    hess_disch_to_bus = hess_discharge_raw * eff['dcbus_to_bess']
-    h2fc_to_bus = h2_fc_raw * eff['fc_to_dcbus']
-    grid_imp_to_bus = grid_import_raw * eff['grid_bidirectional']
+    # 최종 밸런스 보정: 출력 + 손실 = 입력 (수학적 보장)
+    total_out_with_loss = total_out + conv_loss
+    if total_in > 0 and abs(total_in - total_out_with_loss) > 0.01:
+        conv_loss += (total_in - total_out_with_loss)
+        conv_loss = max(0, conv_loss)
     
-    bus_to_aidc = aidc_raw / eff['dcbus_to_aidc']
-    bus_to_hess_chg = hess_charge_raw / eff['dcbus_to_bess']
-    bus_to_h2_elec = h2_elec_raw / eff['dcbus_to_electrolyzer']
-    bus_to_grid_exp = grid_export_raw / eff['grid_bidirectional']
-    
-    total_in = pv_to_bus + hess_disch_to_bus + h2fc_to_bus + grid_imp_to_bus
-    total_out = bus_to_aidc + bus_to_hess_chg + bus_to_h2_elec + bus_to_grid_exp + curtailment
-    losses = max(0, total_in - total_out)
-    
-    # 노드: 0-3 좌측(소스), 4 중앙(DC Bus), 5-10 우측(싱크)
-    node_labels = [
-        "Solar PV",        # 0
-        "HESS 방전",       # 1
-        "H₂ Fuel Cell",   # 2
-        "Grid Import",     # 3
-        "DC Bus",          # 4
-        "AIDC",            # 5
-        "HESS 충전",       # 6
-        "H₂ 전해조",       # 7
-        "Grid Export",     # 8
-        "Curtailment",     # 9
-        "변환 손실",        # 10
+    # --- Sankey 구성 ---
+    # 0-3: 소스(좌), 4: DC Bus(중), 5-10: 싱크(우)
+    labels = [
+        "☀️ Solar PV",     # 0
+        "🔋 HESS 방전",    # 1
+        "💧 H₂ FC",       # 2
+        "🔌 Grid 수입",    # 3
+        "⚡ DC Bus",       # 4
+        "🖥️ AIDC",        # 5
+        "🔋 HESS 충전",    # 6
+        "💧 H₂ 전해조",    # 7
+        "🔌 Grid 수출",    # 8
+        "⛔ Curtailment",  # 9
+        "🔥 변환 손실",     # 10
     ]
     
-    node_colors = [
-        "#d97706",  # PV — 앰버
-        "#0d9488",  # HESS 방전 — 틸
-        "#059669",  # H2 FC — 에메랄드
-        "#6366f1",  # Grid Import — 인디고
-        "#475569",  # DC Bus — 슬레이트
-        "#dc2626",  # AIDC — 레드
-        "#0d9488",  # HESS 충전 — 틸
-        "#059669",  # H2 전해조 — 에메랄드
-        "#6366f1",  # Grid Export — 인디고
-        "#94a3b8",  # Curtailment — 라이트 슬레이트
-        "#9ca3af",  # 변환 손실 — 그레이
+    colors = [
+        "#d97706", "#0d9488", "#059669", "#4f46e5",  # 소스
+        "#334155",                                     # DC Bus
+        "#dc2626", "#0d9488", "#059669", "#4f46e5",  # 싱크
+        "#94a3b8", "#78716c",                          # Curtail, 손실
     ]
     
-    # 링크 구성 (DC Bus 기준 값, > 0.1 인 것만)
-    links = [
-        (0, 4, pv_to_bus,          "rgba(217,119,6,0.4)"),
-        (1, 4, hess_disch_to_bus,  "rgba(13,148,136,0.4)"),
-        (2, 4, h2fc_to_bus,        "rgba(5,150,105,0.4)"),
-        (3, 4, grid_imp_to_bus,    "rgba(99,102,241,0.4)"),
-        (4, 5, bus_to_aidc,        "rgba(220,38,38,0.4)"),
-        (4, 6, bus_to_hess_chg,    "rgba(13,148,136,0.4)"),
-        (4, 7, bus_to_h2_elec,     "rgba(5,150,105,0.4)"),
-        (4, 8, bus_to_grid_exp,    "rgba(99,102,241,0.4)"),
-        (4, 9, curtailment,        "rgba(148,163,184,0.4)"),
-        (4, 10, losses,            "rgba(156,163,175,0.3)"),
+    # (source, target, value, link_color) — 0 이하인 건 자동 제외
+    raw_links = [
+        (0, 4, pv,         "rgba(217,119,6,0.45)"),
+        (1, 4, bess_disch, "rgba(13,148,136,0.45)"),
+        (2, 4, h2_fc,      "rgba(5,150,105,0.45)"),
+        (3, 4, grid_imp,   "rgba(79,70,229,0.45)"),
+        (4, 5, aidc,       "rgba(220,38,38,0.45)"),
+        (4, 6, bess_chg,   "rgba(13,148,136,0.45)"),
+        (4, 7, h2_elec,    "rgba(5,150,105,0.45)"),
+        (4, 8, grid_exp,   "rgba(79,70,229,0.45)"),
+        (4, 9, curtail,    "rgba(148,163,184,0.35)"),
+        (4, 10, conv_loss, "rgba(120,113,108,0.3)"),
     ]
     
-    source_nodes = [s for s, t, v, c in links if v > 0.1]
-    target_nodes = [t for s, t, v, c in links if v > 0.1]
-    values =       [v for s, t, v, c in links if v > 0.1]
-    link_colors =  [c for s, t, v, c in links if v > 0.1]
+    flt = [(s, t, v, c) for s, t, v, c in raw_links if v > 0.1]
     
     fig = go.Figure(data=[go.Sankey(
         arrangement="snap",
+        textfont=dict(size=13, color="#1e293b", family="Arial, sans-serif"),
         node=dict(
-            pad=25,
-            thickness=20,
-            line=dict(color="#e2e8f0", width=0.5),
-            label=node_labels,
-            color=node_colors,
+            pad=30,
+            thickness=22,
+            line=dict(color="#cbd5e1", width=1),
+            label=labels,
+            color=colors,
         ),
         link=dict(
-            source=source_nodes,
-            target=target_nodes,
-            value=values,
-            color=link_colors,
+            source=[s for s, t, v, c in flt],
+            target=[t for s, t, v, c in flt],
+            value=[v for s, t, v, c in flt],
+            color=[c for s, t, v, c in flt],
         ),
     )])
     
     fig.update_layout(
-        title=dict(text="에너지 흐름 요약 (전체 시뮬레이션 기간)", font=dict(size=14)),
-        font=dict(size=11),
-        height=480,
-        margin=dict(l=10, r=10, t=40, b=10),
+        title=dict(
+            text=f"에너지 흐름 요약 · 입력 {total_in:,.0f} MWh → 출력 {total_out:,.0f} MWh + 손실 {conv_loss:,.0f} MWh",
+            font=dict(size=13, color="#334155"),
+        ),
+        font=dict(size=12, family="Arial, sans-serif", color="#1e293b"),
+        height=500,
+        margin=dict(l=20, r=20, t=50, b=10),
     )
     
-    # 요약 메트릭 표시 (DC Bus 기준 값 사용)
+    # 요약 메트릭
     sim_hours = max(len(_safe_dict(data['pv']).get('power_mw', [1])), 1)
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.metric("☀️ PV 발전", f"{pv_to_bus:.0f} MWh", 
-                 delta=f"평균: {pv_to_bus/sim_hours:.1f} MW")
-    
+        st.metric("☀️ PV 발전", f"{pv:.0f} MWh", 
+                 delta=f"평균: {pv/sim_hours:.1f} MW")
     with col2:
-        st.metric("🖥️ AIDC 소비", f"{bus_to_aidc:.0f} MWh",
-                 delta=f"평균: {bus_to_aidc/sim_hours:.1f} MW")
-    
+        st.metric("🖥️ AIDC 소비", f"{aidc:.0f} MWh",
+                 delta=f"평균: {aidc/sim_hours:.1f} MW")
     with col3:
-        hess_net = hess_disch_to_bus - bus_to_hess_chg
+        hess_net = bess_disch - bess_chg
         st.metric("🔋 HESS 순", f"{hess_net:+.0f} MWh", 
                  delta=f"{'방전' if hess_net > 0 else '충전'} 우세")
-    
     with col4:
-        h2_net = h2fc_to_bus - bus_to_h2_elec
+        h2_net = h2_fc - h2_elec
         st.metric("💧 H₂ 순", f"{h2_net:+.0f} MWh",
                  delta=f"{'발전' if h2_net > 0 else '전해'} 우세")
-    
     with col5:
-        grid_net = bus_to_grid_exp - grid_imp_to_bus
+        grid_net = grid_exp - grid_imp
         st.metric("🔌 Grid 순", f"{grid_net:+.0f} MWh",
                  delta=f"{'수출' if grid_net > 0 else '수입'} 우세")
     
