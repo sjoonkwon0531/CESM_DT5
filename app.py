@@ -484,8 +484,19 @@ def display_static_energy_flow_sankey(data):
         h2_electrolyzer_total = pv_total * 0.1
         h2_fuelcell_total = h2_electrolyzer_total * 0.3
     
-    # Curtailment (출력제한)
-    curtailment_total = max(0, pv_total - aidc_total - hess_charge_total - h2_electrolyzer_total - grid_export_total) * 0.05
+    # Curtailment (출력제한) — DC Bus 실제 데이터 사용
+    curtailment_total = _safe_sum(dcbus_data, 'curtailment_mw')
+    
+    # 에너지 밸런스 보정: 입력 합 = 출력 합이 되도록
+    total_in = pv_total + hess_discharge_total + h2_fuelcell_total + grid_import_total
+    total_out = aidc_total + hess_charge_total + h2_electrolyzer_total + grid_export_total + curtailment_total
+    balance_gap = total_in - total_out
+    if abs(balance_gap) > 0.1:
+        # 잔여 불균형은 curtailment에 흡수 (양수) 또는 grid import 보정 (음수)
+        if balance_gap > 0:
+            curtailment_total += balance_gap
+        else:
+            grid_import_total += abs(balance_gap)
     
     # === Sankey 다이어그램 (GDI 스타일: 깔끔한 좌→우, 세련된 색상) ===
     
@@ -509,7 +520,7 @@ def display_static_energy_flow_sankey(data):
         "#2dd4bf",  # HESS 방전 — 틸
         "#4ade80",  # H2 FC — 소프트 그린
         "#818cf8",  # Grid Import — 인디고
-        "#f8fafc",  # DC Bus — 화이트
+        "#475569",  # DC Bus — 슬레이트 그레이
         "#f87171",  # AIDC — 소프트 레드
         "#2dd4bf",  # HESS 충전 — 틸
         "#4ade80",  # H2 전해조 — 소프트 그린
