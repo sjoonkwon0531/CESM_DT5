@@ -418,11 +418,12 @@ def display_results():
     
     # 탭 구성
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, \
-        tab12, tab13, tab14, tab15 = st.tabs([
+        tab12, tab13, tab14, tab15, tab16, tab17 = st.tabs([
         "📊 전력 균형", "☀️ PV 발전", "🖥️ AIDC 부하", 
         "🔄 DC Bus", "🔋 HESS", "⚡ H₂ 시스템", "🔌 그리드",
         "🤖 AI-EMS", "🌍 탄소 회계", "💰 경제성", "📈 통계 분석",
-        "🏛️ 정책 시뮬레이터", "🏭 산업 상용화", "📋 투자 대시보드", "📚 References"
+        "🏛️ 정책 시뮬레이터", "🏭 산업 상용화", "📋 투자 대시보드",
+        "🌏 국제 비교", "📥 데이터 다운로드", "📚 References"
     ])
     
     with tab1:
@@ -468,6 +469,12 @@ def display_results():
         display_investment_dashboard()
     
     with tab15:
+        display_international_comparison(data)
+    
+    with tab16:
+        display_data_download(data)
+    
+    with tab17:
         display_references()
 
 
@@ -2202,6 +2209,414 @@ def display_investment_dashboard():
                           xaxis_title="보조금", yaxis_title="IRR (%)",
                           height=350, template='plotly_white')
     st.plotly_chart(fig_sub, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 데이터 다운로드 탭
+# ═══════════════════════════════════════════════════════════════
+def display_data_download(data):
+    """시뮬레이션 데이터 다운로드"""
+    st.subheader("📥 시뮬레이션 데이터 다운로드")
+
+    if data is None:
+        st.info("시뮬레이션을 먼저 실행해주세요.")
+        return
+
+    import io
+
+    # --- 1. 개별 모듈 CSV 다운로드 ---
+    st.markdown("### 📄 개별 모듈 데이터 (CSV)")
+
+    download_items = {}
+
+    # PV
+    pv_raw = data.get('pv')
+    if pv_raw is not None:
+        if isinstance(pv_raw, pd.DataFrame):
+            download_items['PV_발전'] = pv_raw
+        else:
+            download_items['PV_발전'] = pd.DataFrame(_safe_dict(pv_raw))
+
+    # AIDC
+    aidc_raw = data.get('aidc')
+    if aidc_raw is not None:
+        if isinstance(aidc_raw, pd.DataFrame):
+            download_items['AIDC_부하'] = aidc_raw
+        else:
+            download_items['AIDC_부하'] = pd.DataFrame(_safe_dict(aidc_raw))
+
+    # DC Bus
+    dcbus_raw = data.get('dcbus')
+    if dcbus_raw is not None:
+        if isinstance(dcbus_raw, dict):
+            download_items['DC_Bus'] = pd.DataFrame(_safe_dict(dcbus_raw))
+        elif isinstance(dcbus_raw, pd.DataFrame):
+            download_items['DC_Bus'] = dcbus_raw
+
+    # HESS
+    hess_raw = data.get('hess')
+    if hess_raw is not None and isinstance(hess_raw, pd.DataFrame) and len(hess_raw) > 0:
+        download_items['HESS'] = hess_raw
+
+    # H₂
+    h2_raw = data.get('h2')
+    if h2_raw is not None and isinstance(h2_raw, pd.DataFrame) and len(h2_raw) > 0:
+        download_items['H2_시스템'] = h2_raw
+
+    # Grid
+    grid_raw = data.get('grid')
+    if grid_raw is not None and isinstance(grid_raw, pd.DataFrame) and len(grid_raw) > 0:
+        download_items['Grid'] = grid_raw
+
+    # AI-EMS
+    ems_raw = data.get('ems_df')
+    if ems_raw is not None and isinstance(ems_raw, pd.DataFrame) and len(ems_raw) > 0:
+        download_items['AI_EMS_Dispatch'] = ems_raw
+
+    # Carbon
+    carbon_raw = data.get('carbon_df')
+    if carbon_raw is not None and isinstance(carbon_raw, pd.DataFrame) and len(carbon_raw) > 0:
+        download_items['탄소_회계'] = carbon_raw
+
+    # Weather
+    weather_raw = data.get('weather')
+    if weather_raw is not None and isinstance(weather_raw, pd.DataFrame):
+        download_items['기상_데이터'] = weather_raw
+
+    cols = st.columns(3)
+    for idx, (name, df) in enumerate(download_items.items()):
+        with cols[idx % 3]:
+            csv_buf = df.to_csv(index=True).encode('utf-8-sig')
+            st.download_button(
+                label=f"⬇️ {name}.csv",
+                data=csv_buf,
+                file_name=f"CEMS_DT5_{name}.csv",
+                mime="text/csv",
+                key=f"dl_csv_{name}"
+            )
+            st.caption(f"{len(df)} rows × {len(df.columns)} cols")
+
+    # --- 2. 전체 통합 Excel ---
+    st.markdown("### 📊 전체 통합 Excel (다중 시트)")
+
+    try:
+        excel_buf = io.BytesIO()
+        with pd.ExcelWriter(excel_buf, engine='openpyxl') as writer:
+            for name, df in download_items.items():
+                sheet_name = name[:31]  # Excel 시트명 31자 제한
+                df.to_excel(writer, sheet_name=sheet_name, index=True)
+
+            # 요약 시트 추가
+            summary_data = {}
+            pv_dict = _safe_dict(data.get('pv', {}))
+            aidc_dict = _safe_dict(data.get('aidc', {}))
+            if isinstance(pv_dict, dict) and 'power_mw' in pv_dict:
+                summary_data['총 PV 발전량 (MWh)'] = sum(pv_dict['power_mw'])
+            if isinstance(aidc_dict, dict) and 'total_power_mw' in aidc_dict:
+                summary_data['총 AIDC 소비량 (MWh)'] = sum(aidc_dict['total_power_mw'])
+
+            ems_kpi = data.get('ems_kpi')
+            if ems_kpi and isinstance(ems_kpi, dict):
+                summary_data['자급률 (%)'] = ems_kpi.get('self_sufficiency_ratio', 0) * 100
+                summary_data['Grid 의존도 (%)'] = ems_kpi.get('grid_dependency_ratio', 0) * 100
+
+            if summary_data:
+                summary_df = pd.DataFrame(list(summary_data.items()), columns=['항목', '값'])
+                summary_df.to_excel(writer, sheet_name='Summary', index=False)
+
+        st.download_button(
+            label="📊 전체 데이터 다운로드 (Excel)",
+            data=excel_buf.getvalue(),
+            file_name="CEMS_DT5_전체데이터.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_excel_all"
+        )
+    except ImportError:
+        st.warning("openpyxl 패키지가 필요합니다. CSV 개별 다운로드를 이용해주세요.")
+
+    # --- 3. 전체 TXT (탭 구분) ---
+    st.markdown("### 📝 전체 데이터 (TXT)")
+    txt_buf = io.StringIO()
+    txt_buf.write("=" * 80 + "\n")
+    txt_buf.write("CEMS Digital Twin v5 — Simulation Export\n")
+    txt_buf.write("=" * 80 + "\n\n")
+    for name, df in download_items.items():
+        txt_buf.write(f"### {name} ###\n")
+        txt_buf.write(df.to_string() + "\n\n")
+
+    st.download_button(
+        label="📝 전체 데이터 다운로드 (TXT)",
+        data=txt_buf.getvalue().encode('utf-8'),
+        file_name="CEMS_DT5_전체데이터.txt",
+        mime="text/plain",
+        key="dl_txt_all"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# 국제 비교 탭
+# ═══════════════════════════════════════════════════════════════
+def display_international_comparison(data):
+    """국제 마이크로그리드 비교"""
+    st.subheader("🌏 국제 마이크로그리드 비교")
+
+    # 비교군 데이터 (문헌 기반)
+    INTERNATIONAL_BENCHMARKS = {
+        '🇰🇷 한국 (본 DT)': {
+            'country': 'Korea', 'flag': '🇰🇷',
+            'capacity_mw': 100, 'pv_type': 'Tandem Perovskite-Si',
+            'storage': 'HESS (Supercap+BESS) + H₂',
+            'grid_type': 'Island + Grid-tied hybrid',
+            'irradiance_kwh_m2_yr': 1340,  # 한국 평균
+            'elec_price_usd_mwh': 90,
+            'carbon_intensity_gco2_kwh': 415,  # 한전 2024
+            'carbon_price_usd_ton': 20,  # K-ETS ~25,000 KRW
+            'pv_lcoe_usd_mwh': None,  # 시뮬레이션 결과 사용
+            'capacity_factor': None,
+            'self_sufficiency': None,
+            'notes': '100MW급 AIDC 전용, AI-EMS 3-tier 최적화'
+        },
+        '🇺🇸 미국 (NREL Benchmark)': {
+            'country': 'USA', 'flag': '🇺🇸',
+            'capacity_mw': 100, 'pv_type': 'c-Si Bifacial',
+            'storage': 'Li-ion BESS (4h)',
+            'grid_type': 'Grid-tied + DR',
+            'irradiance_kwh_m2_yr': 1800,  # US Southwest avg
+            'elec_price_usd_mwh': 65,  # US commercial avg
+            'carbon_intensity_gco2_kwh': 370,  # US grid avg 2024
+            'carbon_price_usd_ton': 0,  # No federal carbon price
+            'pv_lcoe_usd_mwh': 28,  # NREL ATB 2024
+            'capacity_factor': 0.26,
+            'self_sufficiency': 0.45,
+            'notes': 'NREL ATB 2024, Southwest US, utility-scale PV+BESS'
+        },
+        '🇨🇳 중국 (SERC 기준)': {
+            'country': 'China', 'flag': '🇨🇳',
+            'capacity_mw': 100, 'pv_type': 'c-Si (LONGi/JA Solar)',
+            'storage': 'LFP BESS (2h mandatory)',
+            'grid_type': 'Grid-tied (mandatory storage)',
+            'irradiance_kwh_m2_yr': 1500,  # 중국 서북부
+            'elec_price_usd_mwh': 55,  # 중국 산업용 평균
+            'carbon_intensity_gco2_kwh': 555,  # 중국 그리드 2024
+            'carbon_price_usd_ton': 10,  # 중국 ETS ~70 CNY
+            'pv_lcoe_usd_mwh': 22,  # 세계 최저
+            'capacity_factor': 0.18,
+            'self_sufficiency': 0.35,
+            'notes': '중국 SERC 기준, 서북부 대규모 PV 기지, 2h 저장 의무'
+        },
+        '🇯🇵 일본 (METI 기준)': {
+            'country': 'Japan', 'flag': '🇯🇵',
+            'capacity_mw': 50, 'pv_type': 'c-Si + Perovskite pilot',
+            'storage': 'Li-ion + 레독스플로우',
+            'grid_type': 'Island-capable (방재)',
+            'irradiance_kwh_m2_yr': 1200,  # 일본 평균
+            'elec_price_usd_mwh': 150,  # 일본 산업용 (높음)
+            'carbon_intensity_gco2_kwh': 450,  # 일본 그리드 2024
+            'carbon_price_usd_ton': 5,  # GX surcharge ~750 JPY
+            'pv_lcoe_usd_mwh': 75,  # FIT/FIP 기반
+            'capacity_factor': 0.15,
+            'self_sufficiency': 0.30,
+            'notes': 'METI 2024, 분산형 마이크로그리드, 방재 겸용 설계'
+        },
+        '🇩🇪 독일 (Fraunhofer ISE)': {
+            'country': 'Germany', 'flag': '🇩🇪',
+            'capacity_mw': 80, 'pv_type': 'c-Si Bifacial + Agri-PV',
+            'storage': 'Li-ion + Green H₂',
+            'grid_type': 'Grid-tied (Energiewende)',
+            'irradiance_kwh_m2_yr': 1050,  # 독일 평균
+            'elec_price_usd_mwh': 180,  # 독일 산업용 (최고)
+            'carbon_intensity_gco2_kwh': 350,  # 독일 그리드 2024 (개선중)
+            'carbon_price_usd_ton': 55,  # EU-ETS ~€50
+            'pv_lcoe_usd_mwh': 45,  # Fraunhofer ISE 2024
+            'capacity_factor': 0.12,
+            'self_sufficiency': 0.38,
+            'notes': 'Fraunhofer ISE 2024, Agri-PV + Green H₂ 시범'
+        }
+    }
+
+    # 시뮬레이션 결과로 한국 데이터 업데이트
+    if data is not None:
+        kr = INTERNATIONAL_BENCHMARKS['🇰🇷 한국 (본 DT)']
+        pv_dict = _safe_dict(data.get('pv', {}))
+        aidc_dict = _safe_dict(data.get('aidc', {}))
+        ems_kpi = data.get('ems_kpi', {})
+
+        if isinstance(pv_dict, dict) and 'capacity_factor' in pv_dict:
+            cf_list = pv_dict['capacity_factor']
+            kr['capacity_factor'] = sum(cf_list) / len(cf_list) if cf_list else 0
+
+        if ems_kpi and isinstance(ems_kpi, dict):
+            kr['self_sufficiency'] = ems_kpi.get('self_sufficiency_ratio', 0)
+
+        # LCOE from economics if available
+        econ = data.get('modules', {}).get('economics')
+        if econ:
+            try:
+                lcoe_result = econ.calculate_lcoe(
+                    capex_total_billion_krw=10000,
+                    annual_generation_mwh=sum(pv_dict.get('power_mw', [0])) * 365 / max(len(pv_dict.get('power_mw', [1])), 1) if isinstance(pv_dict, dict) else 100000,
+                    opex_annual_billion_krw=200,
+                    lifetime_years=25,
+                    discount_rate=0.06
+                )
+                kr['pv_lcoe_usd_mwh'] = lcoe_result.get('lcoe_krw_per_mwh', 136500) / 1350  # KRW→USD
+            except:
+                kr['pv_lcoe_usd_mwh'] = 101  # 136,500 KRW / 1350 환율
+
+    # --- 1. 비교 테이블 ---
+    st.markdown("### 📋 주요 지표 비교")
+    
+    table_data = []
+    for label, info in INTERNATIONAL_BENCHMARKS.items():
+        table_data.append({
+            '국가': label,
+            'PV 용량 (MW)': info['capacity_mw'],
+            'PV 기술': info['pv_type'],
+            '일사량 (kWh/m²/yr)': info['irradiance_kwh_m2_yr'],
+            '전기요금 ($/MWh)': info['elec_price_usd_mwh'],
+            'LCOE ($/MWh)': f"{info['pv_lcoe_usd_mwh']:.0f}" if info['pv_lcoe_usd_mwh'] else '시뮬레이션 중',
+            'CF': f"{info['capacity_factor']:.1%}" if info['capacity_factor'] else '-',
+            '자급률': f"{info['self_sufficiency']:.0%}" if info['self_sufficiency'] else '-',
+            '탄소강도 (gCO₂/kWh)': info['carbon_intensity_gco2_kwh'],
+            '탄소가격 ($/ton)': info['carbon_price_usd_ton'],
+        })
+    
+    df_table = pd.DataFrame(table_data)
+    st.dataframe(df_table, use_container_width=True, hide_index=True)
+
+    # --- 2. Radar Chart ---
+    st.markdown("### 🕸️ 종합 경쟁력 레이더 차트")
+    
+    # 정규화 (0-1)
+    metrics = ['irradiance_kwh_m2_yr', 'elec_price_usd_mwh', 'carbon_intensity_gco2_kwh',
+               'carbon_price_usd_ton']
+    metric_labels = ['일사량', '전기요금 경쟁력', '그리드 청정도', '탄소 규제 강도']
+    
+    fig_radar = go.Figure()
+    colors = ['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6']
+    
+    for idx, (label, info) in enumerate(INTERNATIONAL_BENCHMARKS.items()):
+        values = []
+        # 일사량: 높을수록 좋음 (normalize to 0-1)
+        values.append(info['irradiance_kwh_m2_yr'] / 2000)
+        # 전기요금: 낮을수록 좋음 → 역전
+        values.append(1 - info['elec_price_usd_mwh'] / 200)
+        # 탄소강도: 낮을수록 좋음 → 역전
+        values.append(1 - info['carbon_intensity_gco2_kwh'] / 600)
+        # 탄소규제: 높을수록 RE 인센티브 → 높을수록 좋음
+        values.append(min(1.0, info['carbon_price_usd_ton'] / 60))
+        # 자급률
+        sf = info.get('self_sufficiency') or 0.3
+        values.append(sf)
+        # CF
+        cf = info.get('capacity_factor') or 0.15
+        values.append(cf / 0.30)
+        
+        values.append(values[0])  # close the polygon
+        
+        fig_radar.add_trace(go.Scatterpolar(
+            r=values,
+            theta=metric_labels + ['자급률', 'Capacity Factor', metric_labels[0]],
+            fill='toself', name=info['flag'] + ' ' + info['country'],
+            line=dict(color=colors[idx % len(colors)]),
+            opacity=0.7
+        ))
+    
+    fig_radar.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
+        showlegend=True, height=550, template='plotly_white',
+        title="국가별 마이크로그리드 경쟁력 비교"
+    )
+    st.plotly_chart(fig_radar, use_container_width=True)
+
+    # --- 3. Bar Charts ---
+    st.markdown("### 📊 주요 지표 상세 비교")
+
+    countries = [info['flag'] + ' ' + info['country'] for info in INTERNATIONAL_BENCHMARKS.values()]
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # LCOE 비교
+        lcoe_vals = []
+        for info in INTERNATIONAL_BENCHMARKS.values():
+            lcoe_vals.append(info.get('pv_lcoe_usd_mwh') or 0)
+        fig_lcoe = go.Figure(go.Bar(
+            x=countries, y=lcoe_vals,
+            marker_color=['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'],
+            text=[f"${v:.0f}" for v in lcoe_vals], textposition='outside'
+        ))
+        fig_lcoe.update_layout(title="PV LCOE ($/MWh)", height=350, template='plotly_white',
+                               yaxis_title="$/MWh")
+        st.plotly_chart(fig_lcoe, use_container_width=True)
+
+    with col2:
+        # 전기요금 비교
+        elec_vals = [info['elec_price_usd_mwh'] for info in INTERNATIONAL_BENCHMARKS.values()]
+        fig_elec = go.Figure(go.Bar(
+            x=countries, y=elec_vals,
+            marker_color=['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'],
+            text=[f"${v}" for v in elec_vals], textposition='outside'
+        ))
+        fig_elec.update_layout(title="산업용 전기요금 ($/MWh)", height=350, template='plotly_white',
+                               yaxis_title="$/MWh")
+        st.plotly_chart(fig_elec, use_container_width=True)
+
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        # 탄소강도 비교
+        carbon_vals = [info['carbon_intensity_gco2_kwh'] for info in INTERNATIONAL_BENCHMARKS.values()]
+        fig_carbon = go.Figure(go.Bar(
+            x=countries, y=carbon_vals,
+            marker_color=['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'],
+            text=[f"{v}" for v in carbon_vals], textposition='outside'
+        ))
+        fig_carbon.update_layout(title="그리드 탄소강도 (gCO₂/kWh)", height=350, template='plotly_white',
+                                 yaxis_title="gCO₂/kWh")
+        st.plotly_chart(fig_carbon, use_container_width=True)
+
+    with col4:
+        # 탄소가격 비교
+        cprice_vals = [info['carbon_price_usd_ton'] for info in INTERNATIONAL_BENCHMARKS.values()]
+        fig_cprice = go.Figure(go.Bar(
+            x=countries, y=cprice_vals,
+            marker_color=['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'],
+            text=[f"${v}" for v in cprice_vals], textposition='outside'
+        ))
+        fig_cprice.update_layout(title="탄소가격 ($/ton CO₂)", height=350, template='plotly_white',
+                                 yaxis_title="$/ton")
+        st.plotly_chart(fig_cprice, use_container_width=True)
+
+    # --- 4. 정책 환경 요약 ---
+    st.markdown("### 📝 국가별 정책 환경 및 특이사항")
+    
+    for label, info in INTERNATIONAL_BENCHMARKS.items():
+        with st.expander(label):
+            st.markdown(f"""
+            | 항목 | 내용 |
+            |------|------|
+            | **PV 기술** | {info['pv_type']} |
+            | **저장 시스템** | {info['storage']} |
+            | **계통 연계** | {info['grid_type']} |
+            | **비고** | {info['notes']} |
+            """)
+
+    # --- 5. 시사점 ---
+    st.markdown("### 💡 비교 시사점")
+    st.markdown("""
+    **한국의 포지셔닝:**
+    - 🌞 **일사량**: 중간 (1,340 kWh/m²/yr) — 독일(1,050)보다 유리, 미국 SW(1,800)보다 불리
+    - 💰 **전기요금**: 중간 ($90/MWh) — 일본·독일 대비 경쟁력, 미국·중국 대비 불리
+    - 🏭 **탄소강도**: 높음 (415 gCO₂/kWh) — RE 전환 필요성 큼 → **AIDC 마이크로그리드 당위성 ↑**
+    - 📜 **탄소가격**: 낮음 ($20/ton) — K-ETS 강화 시 경제성 급상승 (정책 시뮬레이터 참조)
+    
+    **핵심 차별점 (본 DT5):**
+    - 🔬 **Tandem Perovskite-Si**: 효율 30%+ 차세대 PV (타국 대비 기술 리드)
+    - ⚡ **3-tier HESS**: Supercap(초단주기) + BESS(중주기) + H₂(장주기) → 타국은 BESS 단일
+    - 🤖 **AI-EMS 3단계 최적화**: LP 기반 실시간 디스패치 → Rule-based 대비 비용 절감
+    - 🏢 **AIDC 전용 설계**: GPU 워크로드 특성 반영 (타국은 범용 마이크로그리드)
+    """)
 
 
 # ═══════════════════════════════════════════════════════════════
