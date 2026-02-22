@@ -52,118 +52,7 @@ if 'simulation_data' not in st.session_state:
 if 'weather_data' not in st.session_state:
     st.session_state.weather_data = None
 
-# GDI 스타일 다크 테마 CSS 적용
-st.markdown("""
-<style>
-    /* 메인 배경 - 딥 네이비 그라데이션 */
-    .stApp {
-        background: linear-gradient(135deg, #0f0f2e 0%, #1a1a3e 100%);
-        color: #e0e0f0;
-    }
-    
-    /* 사이드바 스타일링 - 딥 네이비 */
-    .css-1d391kg {
-        background-color: #12122e !important;
-    }
-    .css-12w0qpk {
-        background-color: #12122e !important;
-    }
-    
-    /* 메트릭 카드 - 절제된 스타일 */
-    [data-testid="metric-container"] {
-        background: rgba(30, 30, 63, 0.8);
-        border: 1px solid rgba(100, 100, 255, 0.1);
-        border-radius: 10px;
-        padding: 1rem;
-        box-shadow: 0 4px 12px rgba(0, 212, 255, 0.1);
-    }
-    
-    /* 메트릭 값 - 밝은 시안 */
-    [data-testid="metric-container"] > div:first-child {
-        color: #00d4ff !important;
-        font-weight: bold;
-    }
-    
-    /* 탭 스타일링 */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: rgba(37, 37, 80, 0.6);
-        border-radius: 10px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        color: #c0c0d0;
-        border-radius: 8px;
-    }
-    
-    .stTabs [data-baseweb="tab"]:hover {
-        background-color: rgba(0, 212, 255, 0.1);
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background-color: rgba(0, 212, 255, 0.15) !important;
-        color: #00d4ff !important;
-        border-bottom: 2px solid #00d4ff;
-    }
-    
-    /* 슬라이더 - 시안/라벤더 계열 */
-    .stSlider > div > div > div > div {
-        background: linear-gradient(90deg, #00d4ff, #a78bfa);
-    }
-    
-    /* 버튼 - 절제된 스타일 */
-    .stButton > button {
-        background: linear-gradient(45deg, #00d4ff, #a78bfa);
-        border: none;
-        border-radius: 8px;
-        color: white;
-        font-weight: bold;
-        box-shadow: 0 2px 8px rgba(0, 212, 255, 0.2);
-        transition: all 0.3s ease;
-    }
-    
-    .stButton > button:hover {
-        box-shadow: 0 4px 16px rgba(167, 139, 250, 0.3);
-        transform: translateY(-1px);
-    }
-    
-    /* 선택박스 스타일 */
-    .stSelectbox > div > div {
-        background-color: rgba(30, 30, 63, 0.8);
-        border: 1px solid rgba(100, 100, 255, 0.1);
-        border-radius: 8px;
-        color: #e0e0f0;
-    }
-    
-    /* 제목 - 연한 그레이 */
-    h1, h2, h3 {
-        color: #e0e0f0 !important;
-    }
-    
-    /* 컨테이너 - 반투명 다크 배경 */
-    .element-container {
-        background: rgba(30, 30, 63, 0.3);
-        border-radius: 8px;
-        padding: 0.5rem;
-    }
-    
-    /* 데이터프레임 스타일링 */
-    .stDataFrame {
-        background-color: rgba(37, 37, 80, 0.8);
-        border: 1px solid rgba(100, 100, 255, 0.1);
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    /* 체크박스 */
-    .stCheckbox > label {
-        color: #c0c0d0 !important;
-    }
-    
-    .stCheckbox input:checked + span {
-        background-color: #00d4ff !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+# 클린 화이트 테마 (Streamlit 기본)
 
 
 @st.cache_data
@@ -666,12 +555,10 @@ def display_static_energy_flow_sankey(data):
     )])
     
     fig.update_layout(
-        title=dict(text="에너지 흐름 요약 (전체 시뮬레이션 기간)", font=dict(size=14, color="#94a3b8")),
-        font=dict(size=11, color="#cbd5e1"),
+        title=dict(text="에너지 흐름 요약 (전체 시뮬레이션 기간)", font=dict(size=14)),
+        font=dict(size=11),
         height=450,
         margin=dict(l=10, r=10, t=40, b=10),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
     )
     
     # 요약 메트릭 표시
@@ -771,7 +658,7 @@ def display_power_balance(data):
     fig.update_layout(
         height=600,
         showlegend=True,
-        template='plotly_dark',
+        template='plotly_white',
         title_text="전력 균형 분석"
     )
     
@@ -862,7 +749,7 @@ def display_pv_results(data):
             ), row=2, col=1
         )
         
-        fig.update_layout(height=500, title="PV 성능 분석", template='plotly_dark')
+        fig.update_layout(height=500, title="PV 성능 분석", template='plotly_white')
         fig.update_xaxes(title_text="시간 (hour)", row=2, col=1)
         fig.update_yaxes(title_text="전력 (MW)", row=1, col=1)
         fig.update_yaxes(title_text="온도 (°C)", secondary_y=True, row=1, col=1)
@@ -934,7 +821,7 @@ def display_aidc_results(data):
             ), row=2, col=1
         )
         
-        fig.update_layout(height=500, title="AIDC 부하 분석", template='plotly_dark')
+        fig.update_layout(height=500, title="AIDC 부하 분석", template='plotly_white')
         fig.update_xaxes(title_text="시간 (hour)", row=2, col=1)
         fig.update_yaxes(title_text="전력 (MW)")
         
@@ -1006,7 +893,7 @@ def display_aidc_results(data):
     fig_zoom.update_layout(
         height=350,
         title=f"AIDC 부하 분단위 프로파일 ({zoom_hour:02d}:00-{zoom_hour:02d}:59)",
-        template='plotly_dark',
+        template='plotly_white',
         xaxis_title="분 (minute)",
         yaxis_title="전력 (MW)",
         showlegend=False
@@ -1094,7 +981,7 @@ def display_dcbus_results(data):
             ), row=3, col=1
         )
     
-    fig.update_layout(height=700, title="DC Bus 전력 흐름", template='plotly_dark')
+    fig.update_layout(height=700, title="DC Bus 전력 흐름", template='plotly_white')
     fig.update_xaxes(title_text="시간 (hour)", row=3, col=1)
     fig.update_yaxes(title_text="전력 (MW)")
     
@@ -1171,7 +1058,7 @@ def display_ems_results(data):
     fig.update_layout(
         barmode='stack', height=450,
         title="AIDC 공급원 구성 (Stacked)",
-        template='plotly_dark',
+        template='plotly_white',
         xaxis_title="시간", yaxis_title="전력 (MW)"
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -1192,7 +1079,7 @@ def display_ems_results(data):
     fig2.update_layout(
         barmode='stack', height=350,
         title="잉여 전력 배분",
-        template='plotly_dark',
+        template='plotly_white',
         xaxis_title="시간", yaxis_title="전력 (MW)"
     )
     st.plotly_chart(fig2, use_container_width=True)
@@ -1252,7 +1139,7 @@ def display_carbon_results(data):
             line=dict(color=COLOR_PALETTE['carbon'])
         ))
         fig_ts.update_layout(title="누적 탄소 배출/회피", height=400,
-                             xaxis_title="시간", yaxis_title="tCO₂", template='plotly_dark')
+                             xaxis_title="시간", yaxis_title="tCO₂", template='plotly_white')
         st.plotly_chart(fig_ts, use_container_width=True)
     
     # K-ETS / CBAM 분석
@@ -1321,7 +1208,7 @@ def display_economics_results(data):
         fig_cf.add_hline(y=base['capex_billion_krw'], line_dash="dash", line_color="gray",
                          annotation_text="CAPEX")
         fig_cf.update_layout(title="연간 현금흐름 (억원)", height=400,
-                             xaxis_title="연차", yaxis_title="억원", template='plotly_dark')
+                             xaxis_title="연차", yaxis_title="억원", template='plotly_white')
         st.plotly_chart(fig_cf, use_container_width=True)
     
     # Monte Carlo
@@ -1367,7 +1254,7 @@ def display_economics_results(data):
         ))
     fig_tornado.update_layout(
         title=f"IRR 민감도 (Base: {base['irr_pct']:.1f}%)",
-        xaxis_title="IRR 변동 (%p)", barmode='overlay', height=400, template='plotly_dark'
+        xaxis_title="IRR 변동 (%p)", barmode='overlay', height=400, template='plotly_white'
     )
     st.plotly_chart(fig_tornado, use_container_width=True)
     
@@ -1501,7 +1388,7 @@ def display_hess_results(data):
         title="HESS 레이어별 SOC",
         labels={'x': '레이어', 'y': 'SOC (%)'}
     )
-    fig.update_layout(height=400, template='plotly_dark')
+    fig.update_layout(height=400, template='plotly_white')
     st.plotly_chart(fig, use_container_width=True)
     
     # 시간별 운전 차트
@@ -1528,7 +1415,7 @@ def display_hess_results(data):
     fig.update_layout(
         title="HESS 전력 및 SOC",
         xaxis_title="시간",
-        template='plotly_dark',
+        template='plotly_white',
         yaxis_title="전력 (MW)",
         yaxis2=dict(
             title="SOC (%)",
@@ -1646,7 +1533,7 @@ def display_h2_results(data):
         fig.update_layout(
             title="H₂ 시스템 운전 이력",
             xaxis_title="시간",
-            template='plotly_dark',
+            template='plotly_white',
             yaxis_title="전력 (MW)",
             height=400
         )
@@ -1745,7 +1632,7 @@ def display_grid_results(data):
         fig.update_layout(
             title="그리드 거래 전력 (양수: 구매, 음수: 판매)",
             xaxis_title="시간",
-            template='plotly_dark',
+            template='plotly_white',
             yaxis_title="전력 (MW)",
             height=400
         )
@@ -1766,7 +1653,7 @@ def display_grid_results(data):
         fig2.update_layout(
             title="시간대별 SMP 가격",
             xaxis_title="시간",
-            template='plotly_dark', 
+            template='plotly_white', 
             yaxis_title="SMP 가격 (₩/MWh)",
             height=400
         )
@@ -1898,7 +1785,7 @@ def display_statistics(data):
                                          name='📤 그리드 수출', line=dict(color='#22c55e', dash='dash')))
             
             fig.update_layout(title="시간별 전력 흐름", xaxis_title="시간 (h)", 
-                            yaxis_title="전력 (MW)", height=450, template='plotly_dark')
+                            yaxis_title="전력 (MW)", height=450, template='plotly_white')
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("시뮬레이션을 먼저 실행해주세요.")
@@ -1911,7 +1798,7 @@ def display_statistics(data):
             if len(pv_power) > 0:
                 fig = px.histogram(x=pv_power, nbins=30, title="PV 발전량 분포 (MW)",
                                    labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#f59e0b'],
-                                   template='plotly_dark')
+                                   template='plotly_white')
                 fig.update_layout(height=300)
                 st.plotly_chart(fig, use_container_width=True)
         
@@ -1919,7 +1806,7 @@ def display_statistics(data):
             if len(aidc_power) > 0:
                 fig = px.histogram(x=aidc_power, nbins=30, title="AIDC 부하 분포 (MW)",
                                    labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#ef4444'],
-                                   template='plotly_dark')
+                                   template='plotly_white')
                 fig.update_layout(height=300)
                 st.plotly_chart(fig, use_container_width=True)
         
@@ -2010,7 +1897,7 @@ def display_policy_simulator():
     fig.update_layout(
         title="탄소가격 × REC 가격 → IRR (%)",
         xaxis_title="REC 가격 (₩/MWh)",
-        template='plotly_dark',
+        template='plotly_white',
         yaxis_title="K-ETS 탄소가격 (₩/tCO₂)",
         height=400)
     st.plotly_chart(fig, use_container_width=True)
@@ -2068,7 +1955,7 @@ def display_industry_model():
     fig.add_trace(go.Bar(name="연간 수익 (억)", x=names,
                          y=[c["annual_revenue_billion_krw"] for c in all_csp]))
     fig.update_layout(barmode="group", height=400,
-                      title="CSP별 CAPEX vs 연간 수익", template='plotly_dark')
+                      title="CSP별 CAPEX vs 연간 수익", template='plotly_white')
     st.plotly_chart(fig, use_container_width=True)
 
     # 스케일링 분석
@@ -2079,7 +1966,7 @@ def display_industry_model():
     fig2.add_trace(go.Scatter(x=caps, y=[s["irr_pct"] or 0 for s in scaling],
                               mode="lines+markers", name="IRR (%)"))
     fig2.update_layout(title="용량별 IRR", xaxis_title="용량 (MW)",
-                       yaxis_title="IRR (%)", height=350, template='plotly_dark')
+                       yaxis_title="IRR (%)", height=350, template='plotly_white')
     st.plotly_chart(fig2, use_container_width=True)
 
 
@@ -2125,7 +2012,7 @@ def display_investment_dashboard():
         fig_irr.add_vline(x=mc["irr_mean_pct"], line_dash="dash",
                           annotation_text=f"Mean: {mc['irr_mean_pct']:.1f}%")
         fig_irr.update_layout(title="IRR 분포", xaxis_title="IRR (%)",
-                              yaxis_title="빈도", height=350, template='plotly_dark')
+                              yaxis_title="빈도", height=350, template='plotly_white')
         st.plotly_chart(fig_irr, use_container_width=True)
 
     with col_b:
@@ -2136,7 +2023,7 @@ def display_investment_dashboard():
         fig_npv.add_vline(x=0, line_dash="solid", line_color="red",
                           annotation_text="BEP")
         fig_npv.update_layout(title="NPV 분포", xaxis_title="NPV (억원)",
-                              yaxis_title="빈도", height=350, template='plotly_dark')
+                              yaxis_title="빈도", height=350, template='plotly_white')
         st.plotly_chart(fig_npv, use_container_width=True)
 
     st.info(f"P(NPV>0) = **{mc['prob_positive_npv_pct']:.1f}%** | "
@@ -2180,7 +2067,7 @@ def display_investment_dashboard():
         textposition="auto"))
     fig_sub.update_layout(title="보조금 비율별 IRR",
                           xaxis_title="보조금", yaxis_title="IRR (%)",
-                          height=350, template='plotly_dark')
+                          height=350, template='plotly_white')
     st.plotly_chart(fig_sub, use_container_width=True)
 
 
