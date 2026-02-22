@@ -1546,66 +1546,70 @@ def display_statistics(data):
     st.subheader("📈 통합 통계 분석")
     
     try:
-        results = data.get('results', {})
+        import pandas as pd
+        import plotly.graph_objects as go
+        import plotly.express as px
+        import numpy as np
+        
+        pv_data = _safe_dict(data.get('pv', {}))
+        aidc_data = _safe_dict(data.get('aidc', {}))
+        grid_df = data.get('grid', pd.DataFrame())
+        ems_kpi = data.get('ems_kpi', {})
+        carbon_df = data.get('carbon_df', pd.DataFrame())
+        pv_module = data['modules']['pv']
         
         # Summary metrics
         col1, col2, col3, col4 = st.columns(4)
         
-        pv_data = results.get('pv', {})
-        aidc_data = results.get('aidc', {})
-        hess_data = results.get('hess', {})
-        grid_data = results.get('grid', {})
+        pv_power = pv_data.get('power_mw', [])
+        aidc_power = aidc_data.get('power_mw', [])
         
         with col1:
-            cf = pv_data.get('capacity_factor', 0)
-            st.metric("PV Capacity Factor", f"{cf*100:.1f}%" if cf else "N/A")
+            if pv_power:
+                pv_cap = pv_module.capacity_mw if hasattr(pv_module, 'capacity_mw') else 100
+                cf = np.mean(pv_power) / pv_cap if pv_cap > 0 else 0
+                st.metric("PV Capacity Factor", f"{cf*100:.1f}%")
+            else:
+                st.metric("PV Capacity Factor", "N/A")
         with col2:
-            avg_load = aidc_data.get('avg_power_mw', 0)
-            st.metric("평균 AIDC 부하", f"{avg_load:.1f} MW" if avg_load else "N/A")
+            if aidc_power:
+                st.metric("평균 AIDC 부하", f"{np.mean(aidc_power):.1f} MW")
+            else:
+                st.metric("평균 AIDC 부하", "N/A")
         with col3:
-            self_suff = results.get('self_sufficiency', 0)
-            st.metric("자급률", f"{self_suff*100:.1f}%" if self_suff else "N/A")
+            if ems_kpi:
+                ss = ems_kpi.get('self_sufficiency_pct', 0)
+                st.metric("자급률", f"{ss:.1f}%")
+            else:
+                st.metric("자급률", "N/A")
         with col4:
-            curtail = results.get('curtailment_pct', 0)
-            st.metric("Curtailment", f"{curtail*100:.1f}%" if curtail else "N/A")
+            if ems_kpi:
+                curt = ems_kpi.get('curtailment_pct', 0)
+                st.metric("Curtailment", f"{curt:.1f}%")
+            else:
+                st.metric("Curtailment", "N/A")
         
         st.divider()
         
-        # Time series summary
+        # Time series: combined power flow
         st.subheader("⏱️ 시간별 에너지 흐름 요약")
         
-        if 'timeseries' in results:
-            ts = results['timeseries']
-            import pandas as pd
-            df = pd.DataFrame(ts)
+        if pv_power and aidc_power:
+            hours = list(range(len(pv_power)))
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=hours, y=pv_power, name='☀️ PV 발전', line=dict(color='#f59e0b')))
+            fig.add_trace(go.Scatter(x=hours, y=aidc_power, name='🖥️ AIDC 부하', line=dict(color='#ef4444')))
             
-            if not df.empty:
-                import plotly.graph_objects as go
-                fig = go.Figure()
-                
-                for col_name in ['pv_power', 'aidc_load', 'grid_import', 'grid_export']:
-                    if col_name in df.columns:
-                        labels = {
-                            'pv_power': '☀️ PV 발전',
-                            'aidc_load': '🖥️ AIDC 부하',
-                            'grid_import': '📥 그리드 수입',
-                            'grid_export': '📤 그리드 수출',
-                        }
-                        fig.add_trace(go.Scatter(
-                            y=df[col_name], 
-                            name=labels.get(col_name, col_name),
-                            mode='lines'
-                        ))
-                
-                fig.update_layout(
-                    title="시간별 전력 흐름",
-                    xaxis_title="시간 (h)",
-                    yaxis_title="전력 (MW)",
-                    height=400,
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("시계열 데이터가 비어있습니다.")
+            if isinstance(grid_df, pd.DataFrame) and 'import_mw' in grid_df.columns:
+                fig.add_trace(go.Scatter(x=hours[:len(grid_df)], y=grid_df['import_mw'].tolist(), 
+                                         name='📥 그리드 수입', line=dict(color='#3b82f6', dash='dash')))
+            if isinstance(grid_df, pd.DataFrame) and 'export_mw' in grid_df.columns:
+                fig.add_trace(go.Scatter(x=hours[:len(grid_df)], y=grid_df['export_mw'].tolist(), 
+                                         name='📤 그리드 수출', line=dict(color='#22c55e', dash='dash')))
+            
+            fig.update_layout(title="시간별 전력 흐름", xaxis_title="시간 (h)", 
+                            yaxis_title="전력 (MW)", height=450, template='plotly_white')
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("시뮬레이션을 먼저 실행해주세요.")
         
@@ -1613,25 +1617,45 @@ def display_statistics(data):
         st.subheader("📊 분포 분석")
         col1, col2 = st.columns(2)
         
-        if 'timeseries' in results and results['timeseries']:
-            import plotly.express as px
-            df = pd.DataFrame(results['timeseries'])
+        with col1:
+            if pv_power:
+                fig = px.histogram(x=pv_power, nbins=30, title="PV 발전량 분포 (MW)",
+                                   labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#f59e0b'])
+                fig.update_layout(height=300)
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            if aidc_power:
+                fig = px.histogram(x=aidc_power, nbins=30, title="AIDC 부하 분포 (MW)",
+                                   labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#ef4444'])
+                fig.update_layout(height=300)
+                st.plotly_chart(fig, use_container_width=True)
+        
+        # Key statistics table
+        st.subheader("📋 주요 통계")
+        if pv_power and aidc_power:
+            stats_data = {
+                '항목': ['PV 발전', 'AIDC 부하'],
+                '평균 (MW)': [f"{np.mean(pv_power):.2f}", f"{np.mean(aidc_power):.2f}"],
+                '최대 (MW)': [f"{np.max(pv_power):.2f}", f"{np.max(aidc_power):.2f}"],
+                '최소 (MW)': [f"{np.min(pv_power):.2f}", f"{np.min(aidc_power):.2f}"],
+                '표준편차': [f"{np.std(pv_power):.2f}", f"{np.std(aidc_power):.2f}"],
+            }
             
-            with col1:
-                if 'pv_power' in df.columns:
-                    fig = px.histogram(df, x='pv_power', nbins=30, title="PV 발전량 분포")
-                    fig.update_layout(height=300)
-                    st.plotly_chart(fig, use_container_width=True)
+            if isinstance(carbon_df, pd.DataFrame) and 'total_tCO2' in carbon_df.columns:
+                total_co2 = carbon_df['total_tCO2'].sum()
+                stats_data['항목'].append('탄소 배출')
+                stats_data['평균 (MW)'].append(f"{carbon_df['total_tCO2'].mean():.3f} tCO₂/h")
+                stats_data['최대 (MW)'].append(f"{carbon_df['total_tCO2'].max():.3f} tCO₂/h")
+                stats_data['최소 (MW)'].append(f"{carbon_df['total_tCO2'].min():.3f} tCO₂/h")
+                stats_data['표준편차'].append(f"{carbon_df['total_tCO2'].std():.3f}")
             
-            with col2:
-                if 'aidc_load' in df.columns:
-                    fig = px.histogram(df, x='aidc_load', nbins=30, title="AIDC 부하 분포")
-                    fig.update_layout(height=300)
-                    st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(pd.DataFrame(stats_data), use_container_width=True, hide_index=True)
     
     except Exception as e:
         st.error(f"통계 분석 오류: {e}")
-        st.info("시뮬레이션을 먼저 실행한 후 확인해주세요.")
+        import traceback
+        st.code(traceback.format_exc())
 
 def display_policy_simulator():
     """정책 시뮬레이터 탭"""
