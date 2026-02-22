@@ -440,18 +440,20 @@ def display_results():
 
 
 def display_static_energy_flow_sankey(data):
-    """정적 에너지 흐름 요약 Sankey 다이어그램 표시 (전체 시뮬레이션 기간 누적)"""
+    """정적 에너지 흐름 요약 Sankey 다이어그램 표시 (전체 시뮬레이션 기간 누적)
     
-    # 데이터 추출
-    pv_data = _safe_dict(data['pv'])
-    aidc_data = _safe_dict(data['aidc'])
+    DC Bus 관점 에너지 보존:
+      입력 = PV×η_pv + HESS방전×η_bess + H2FC×η_fc + Grid수입×η_grid
+      출력 = AIDC/η_aidc + HESS충전/η_bess + H2전해/η_elec + Grid수출/η_grid + Curtailment
+      손실 = 입력 - 출력 (변환 손실)
+    모든 링크 값은 DC Bus 기준이므로 좌우 합이 정확히 일치.
+    """
+    import pandas as pd
+    from config import CONVERTER_EFFICIENCY
+    
     dcbus_data = _safe_dict(data['dcbus'])
     
-    # 전체 시뮬레이션 기간의 누적 에너지 계산 (MWh)
-    import pandas as pd
-    
     def _safe_sum(d, key):
-        """Safely sum a list, Series, or array from a dict."""
         val = d.get(key, [])
         if val is None:
             return 0
@@ -464,28 +466,43 @@ def display_static_energy_flow_sankey(data):
         except (TypeError, ValueError):
             return 0
     
-    pv_total = _safe_sum(pv_data, 'power_mw')
-    aidc_total = _safe_sum(aidc_data, 'total_power_mw') or _safe_sum(aidc_data, 'power_mw')
+    # 컨버터 효율 (사이드바에서 선택한 기술에 맞춤)
+    conv_tech = getattr(st.session_state, 'converter_tech', 'default')
+    eff = CONVERTER_EFFICIENCY.get(conv_tech, CONVERTER_EFFICIENCY['default'])
     
-    # HESS 데이터
-    hess_charge_total = _safe_sum(dcbus_data, 'bess_charge_mw')
-    hess_discharge_total = _safe_sum(dcbus_data, 'bess_discharge_mw')
+    # 장치 측 raw 값 (DC Bus가 기록한 값)
+    pv_raw = _safe_sum(dcbus_data, 'pv_power_mw')
+    if pv_raw < 0.1:  # dcbus에 pv_power_mw가 없으면 pv 데이터에서
+        pv_data = _safe_dict(data['pv'])
+        pv_raw = _safe_sum(pv_data, 'power_mw')
     
-    # Grid 데이터  
-    grid_import_total = _safe_sum(dcbus_data, 'grid_import_mw')
-    grid_export_total = _safe_sum(dcbus_data, 'grid_export_mw')
+    hess_discharge_raw = _safe_sum(dcbus_data, 'bess_discharge_mw')
+    hess_charge_raw = _safe_sum(dcbus_data, 'bess_charge_mw')
+    h2_fc_raw = _safe_sum(dcbus_data, 'h2_fuelcell_mw')
+    h2_elec_raw = _safe_sum(dcbus_data, 'h2_electrolyzer_mw')
+    grid_import_raw = _safe_sum(dcbus_data, 'grid_import_mw')
+    grid_export_raw = _safe_sum(dcbus_data, 'grid_export_mw')
+    curtailment = _safe_sum(dcbus_data, 'curtailment_mw')
     
-    # H2 시스템 데이터
-    # H2 데이터 — DC Bus가 이미 정확한 값을 가지고 있음
-    h2_electrolyzer_total = _safe_sum(dcbus_data, 'h2_electrolyzer_mw')
-    h2_fuelcell_total = _safe_sum(dcbus_data, 'h2_fuelcell_mw')
+    aidc_data_dict = _safe_dict(data['aidc'])
+    aidc_raw = _safe_sum(aidc_data_dict, 'total_power_mw') or _safe_sum(aidc_data_dict, 'power_mw')
     
-    # Curtailment (출력제한) — DC Bus 실제 데이터 사용
-    curtailment_total = _safe_sum(dcbus_data, 'curtailment_mw')
+    # DC Bus 기준 값 (효율 적용) — Sankey 좌우 밸런스 보장
+    pv_to_bus = pv_raw * eff['pv_to_dcbus']
+    hess_disch_to_bus = hess_discharge_raw * eff['dcbus_to_bess']
+    h2fc_to_bus = h2_fc_raw * eff['fc_to_dcbus']
+    grid_imp_to_bus = grid_import_raw * eff['grid_bidirectional']
     
-    # === Sankey 다이어그램 (GDI 스타일: 깔끔한 좌→우, 세련된 색상) ===
+    bus_to_aidc = aidc_raw / eff['dcbus_to_aidc']
+    bus_to_hess_chg = hess_charge_raw / eff['dcbus_to_bess']
+    bus_to_h2_elec = h2_elec_raw / eff['dcbus_to_electrolyzer']
+    bus_to_grid_exp = grid_export_raw / eff['grid_bidirectional']
     
-    # 노드: 0-3 좌측(소스), 4 중앙(DC Bus), 5-9 우측(싱크)
+    total_in = pv_to_bus + hess_disch_to_bus + h2fc_to_bus + grid_imp_to_bus
+    total_out = bus_to_aidc + bus_to_hess_chg + bus_to_h2_elec + bus_to_grid_exp + curtailment
+    losses = max(0, total_in - total_out)
+    
+    # 노드: 0-3 좌측(소스), 4 중앙(DC Bus), 5-10 우측(싱크)
     node_labels = [
         "Solar PV",        # 0
         "HESS 방전",       # 1
@@ -497,33 +514,35 @@ def display_static_energy_flow_sankey(data):
         "H₂ 전해조",       # 7
         "Grid Export",     # 8
         "Curtailment",     # 9
+        "변환 손실",        # 10
     ]
     
-    # 세련된 GDI 톤 (파스텔 + 다크 배경 조화)
     node_colors = [
-        "#e6a817",  # PV — 머스타드 골드
-        "#2dd4bf",  # HESS 방전 — 틸
-        "#4ade80",  # H2 FC — 소프트 그린
-        "#818cf8",  # Grid Import — 인디고
-        "#475569",  # DC Bus — 슬레이트 그레이
-        "#f87171",  # AIDC — 소프트 레드
-        "#2dd4bf",  # HESS 충전 — 틸
-        "#4ade80",  # H2 전해조 — 소프트 그린
-        "#818cf8",  # Grid Export — 인디고
-        "#64748b",  # Curtailment — 슬레이트
+        "#d97706",  # PV — 앰버
+        "#0d9488",  # HESS 방전 — 틸
+        "#059669",  # H2 FC — 에메랄드
+        "#6366f1",  # Grid Import — 인디고
+        "#475569",  # DC Bus — 슬레이트
+        "#dc2626",  # AIDC — 레드
+        "#0d9488",  # HESS 충전 — 틸
+        "#059669",  # H2 전해조 — 에메랄드
+        "#6366f1",  # Grid Export — 인디고
+        "#94a3b8",  # Curtailment — 라이트 슬레이트
+        "#9ca3af",  # 변환 손실 — 그레이
     ]
     
-    # 링크 구성 (값 > 0.1 인 것만)
+    # 링크 구성 (DC Bus 기준 값, > 0.1 인 것만)
     links = [
-        (0, 4, pv_total,              "rgba(230,168,23,0.35)"),
-        (1, 4, hess_discharge_total,  "rgba(45,212,191,0.35)"),
-        (2, 4, h2_fuelcell_total,     "rgba(74,222,128,0.35)"),
-        (3, 4, grid_import_total,     "rgba(129,140,248,0.35)"),
-        (4, 5, aidc_total,            "rgba(248,113,113,0.35)"),
-        (4, 6, hess_charge_total,     "rgba(45,212,191,0.35)"),
-        (4, 7, h2_electrolyzer_total, "rgba(74,222,128,0.35)"),
-        (4, 8, grid_export_total,     "rgba(129,140,248,0.35)"),
-        (4, 9, curtailment_total,     "rgba(100,116,139,0.35)"),
+        (0, 4, pv_to_bus,          "rgba(217,119,6,0.4)"),
+        (1, 4, hess_disch_to_bus,  "rgba(13,148,136,0.4)"),
+        (2, 4, h2fc_to_bus,        "rgba(5,150,105,0.4)"),
+        (3, 4, grid_imp_to_bus,    "rgba(99,102,241,0.4)"),
+        (4, 5, bus_to_aidc,        "rgba(220,38,38,0.4)"),
+        (4, 6, bus_to_hess_chg,    "rgba(13,148,136,0.4)"),
+        (4, 7, bus_to_h2_elec,     "rgba(5,150,105,0.4)"),
+        (4, 8, bus_to_grid_exp,    "rgba(99,102,241,0.4)"),
+        (4, 9, curtailment,        "rgba(148,163,184,0.4)"),
+        (4, 10, losses,            "rgba(156,163,175,0.3)"),
     ]
     
     source_nodes = [s for s, t, v, c in links if v > 0.1]
@@ -534,13 +553,11 @@ def display_static_energy_flow_sankey(data):
     fig = go.Figure(data=[go.Sankey(
         arrangement="snap",
         node=dict(
-            pad=30,
-            thickness=25,
-            line=dict(color="rgba(255,255,255,0.08)", width=0.5),
+            pad=25,
+            thickness=20,
+            line=dict(color="#e2e8f0", width=0.5),
             label=node_labels,
             color=node_colors,
-            x=[0.01, 0.01, 0.01, 0.01,  0.45,  0.99, 0.99, 0.99, 0.99, 0.99],
-            y=[0.2,  0.4,  0.6,  0.8,   0.5,   0.1,  0.35, 0.55, 0.75, 0.95],
         ),
         link=dict(
             source=source_nodes,
@@ -553,7 +570,7 @@ def display_static_energy_flow_sankey(data):
     fig.update_layout(
         title=dict(text="에너지 흐름 요약 (전체 시뮬레이션 기간)", font=dict(size=14)),
         font=dict(size=11),
-        height=450,
+        height=480,
         margin=dict(l=10, r=10, t=40, b=10),
     )
     
