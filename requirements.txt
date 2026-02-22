@@ -5,3 +5,4 @@ scipy==1.15.2
 plotly==5.24.1
 python-dateutil>=2.8.0
 typing-extensions>=4.0.0
+# white theme rebuild trigger
