@@ -334,8 +334,12 @@ def run_simulation():
                     hour_of_day=hour,
                 )
                 ems_dispatches.append(cmd.to_dict())
-                ems_soc = float(np.clip(ems_soc + (cmd.pv_to_hess_mw - cmd.hess_to_aidc_mw) / 2000, 0, 1))
-                ems_h2 = float(np.clip(ems_h2 + (cmd.h2_electrolyzer_mw - cmd.h2_fuelcell_mw) / 5000, 0, 1))
+                # SOC 업데이트: HESS 용량 ~200 MWh, H₂ 저장 ~5000 kg (~167 MWh)
+                # 1시간 운전이므로 MWh = MW × 1h
+                hess_capacity_mwh = 200.0  # Supercap + BESS 합산
+                h2_capacity_mwh = 167.0    # 5000 kg × 33.3 kWh/kg
+                ems_soc = float(np.clip(ems_soc + (cmd.pv_to_hess_mw - cmd.hess_to_aidc_mw) / hess_capacity_mwh, 0, 1))
+                ems_h2 = float(np.clip(ems_h2 + (cmd.h2_electrolyzer_mw - cmd.h2_fuelcell_mw) / h2_capacity_mwh, 0, 1))
             ems_df = pd.DataFrame(ems_dispatches)
             ems_kpi = ems.calculate_kpi()
 

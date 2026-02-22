@@ -196,18 +196,30 @@ class Tier2PredictiveControl:
         #   HESS→AIDC: degradation cost (~10% of grid price as wear proxy)
         #   H2 FC→AIDC: efficiency loss cost
         #   Grid→AIDC: grid_price
-        hess_wear_cost = grid_price_krw * 0.15  # storage depletion opportunity cost
-        h2_fc_cost = grid_price_krw * 0.30      # low round-trip efficiency
+        # === Merit Order (물리적 설계 의도) ===
+        # 1순위: PV→AIDC (자가소비, 최우선 — 무비용 + 그리드 회피)
+        # 2순위: HESS→AIDC (단/중주기 밸런싱, Supercap+BESS)
+        # 3순위: H₂ FC→AIDC (장주기, 효율 낮지만 계절 저장)
+        # 4순위: Grid→AIDC (최후 수단, 최고 비용)
+        # PV 잉여: PV→HESS 충전 > PV→H₂ 전해 > PV→Grid 매전 > Curtailment
+        hess_wear_cost = grid_price_krw * 0.25   # HESS 열화 + 기회비용
+        h2_fc_cost = grid_price_krw * 0.50        # H₂ 왕복 효율 ~35-45%
 
         c = np.zeros(n)
-        c[0] = 0                    # pv→aidc: free (best)
-        c[1] = sell_price * 0.5     # pv→hess: opportunity cost of not selling
-        c[2] = -sell_price          # pv→grid: sell revenue
-        c[3] = sell_price * 0.3     # h2 electrolyzer: efficiency loss
-        c[4] = hess_wear_cost       # hess→aidc: degradation/opportunity
-        c[5] = h2_fc_cost           # h2 fc→aidc: low efficiency
-        c[6] = grid_price_krw       # grid purchase: full cost
-        c[7] = curtailment_penalty  # curtailment: waste
+        # SOC-adaptive 충전 인센티브: SOC 낮을수록 충전 가치 상승
+        # 자급률 극대화 정책: 잉여 PV는 저장 우선, 매전은 저장 만충 후
+        # hess_charge_value > sell_price 이어야 충전이 매전보다 우선
+        hess_charge_value = grid_price_krw * max(0, 1.2 - hess_soc)     # SOC 0→1.2×price, SOC 0.5→0.7×price
+        h2_charge_value = grid_price_krw * max(0, 0.95 - h2_storage_level)  # H₂ 0→0.95×price
+
+        c[0] = -grid_price_krw      # pv→aidc: 자가소비 (그리드 구매 회피 = 최대 절감)
+        c[1] = -hess_charge_value   # pv→hess: SOC 낮으면 매전보다 충전 우선
+        c[2] = -sell_price          # pv→grid: 매전 수입
+        c[3] = -h2_charge_value     # h2 전해: 장기 저장 (SOC 낮으면 우선)
+        c[4] = hess_wear_cost       # hess→aidc: 단/중주기 방전 (Grid보다 저렴)
+        c[5] = h2_fc_cost           # h2 fc→aidc: 장주기 방전 (효율 낮음)
+        c[6] = grid_price_krw       # grid 구매: 최후 수단 (최고 비용)
+        c[7] = curtailment_penalty  # curtailment: 낭비 패널티
 
         # Equality constraints: A_eq @ x = b_eq
         A_eq = np.zeros((2, n))
