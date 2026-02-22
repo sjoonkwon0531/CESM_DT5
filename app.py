@@ -1565,14 +1565,14 @@ def display_statistics(data):
         aidc_power = aidc_data.get('power_mw', [])
         
         with col1:
-            if pv_power:
+            if len(pv_power) > 0:
                 pv_cap = pv_module.capacity_mw if hasattr(pv_module, 'capacity_mw') else 100
                 cf = np.mean(pv_power) / pv_cap if pv_cap > 0 else 0
                 st.metric("PV Capacity Factor", f"{cf*100:.1f}%")
             else:
                 st.metric("PV Capacity Factor", "N/A")
         with col2:
-            if aidc_power:
+            if len(aidc_power) > 0:
                 st.metric("평균 AIDC 부하", f"{np.mean(aidc_power):.1f} MW")
             else:
                 st.metric("평균 AIDC 부하", "N/A")
@@ -1594,7 +1594,7 @@ def display_statistics(data):
         # Time series: combined power flow
         st.subheader("⏱️ 시간별 에너지 흐름 요약")
         
-        if pv_power and aidc_power:
+        if len(pv_power) > 0 and len(aidc_power) > 0:
             hours = list(range(len(pv_power)))
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=hours, y=pv_power, name='☀️ PV 발전', line=dict(color='#f59e0b')))
@@ -1618,14 +1618,14 @@ def display_statistics(data):
         col1, col2 = st.columns(2)
         
         with col1:
-            if pv_power:
+            if len(pv_power) > 0:
                 fig = px.histogram(x=pv_power, nbins=30, title="PV 발전량 분포 (MW)",
                                    labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#f59e0b'])
                 fig.update_layout(height=300)
                 st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            if aidc_power:
+            if len(aidc_power) > 0:
                 fig = px.histogram(x=aidc_power, nbins=30, title="AIDC 부하 분포 (MW)",
                                    labels={'x': 'MW', 'y': 'Count'}, color_discrete_sequence=['#ef4444'])
                 fig.update_layout(height=300)
@@ -1633,7 +1633,7 @@ def display_statistics(data):
         
         # Key statistics table
         st.subheader("📋 주요 통계")
-        if pv_power and aidc_power:
+        if len(pv_power) > 0 and len(aidc_power) > 0:
             stats_data = {
                 '항목': ['PV 발전', 'AIDC 부하'],
                 '평균 (MW)': [f"{np.mean(pv_power):.2f}", f"{np.mean(aidc_power):.2f}"],
