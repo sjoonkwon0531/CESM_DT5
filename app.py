@@ -755,7 +755,12 @@ def display_power_balance(data):
     st.subheader("⚡ 에너지 흐름 요약")
     
     # 정적 Sankey 표시
-    display_static_energy_flow_sankey(data)
+    try:
+        display_static_energy_flow_sankey(data)
+    except Exception as e:
+        st.warning(f"에너지 흐름 다이어그램 로딩 중 오류: {e}")
+        import traceback
+        st.code(traceback.format_exc())
     
     st.subheader("⚖️ 전력 공급 vs 수요")
     
