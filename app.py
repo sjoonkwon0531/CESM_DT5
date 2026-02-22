@@ -476,27 +476,12 @@ def display_static_energy_flow_sankey(data):
     grid_export_total = _safe_sum(dcbus_data, 'grid_export_mw')
     
     # H2 시스템 데이터
-    h2_data = data.get('h2', pd.DataFrame())
-    if isinstance(h2_data, pd.DataFrame) and not h2_data.empty:
-        h2_electrolyzer_total = float(h2_data['electrolyzer_mw'].sum()) if 'electrolyzer_mw' in h2_data.columns else pv_total * 0.1
-        h2_fuelcell_total = float(h2_data['fuelcell_mw'].sum()) if 'fuelcell_mw' in h2_data.columns else h2_electrolyzer_total * 0.3
-    else:
-        h2_electrolyzer_total = pv_total * 0.1
-        h2_fuelcell_total = h2_electrolyzer_total * 0.3
+    # H2 데이터 — DC Bus가 이미 정확한 값을 가지고 있음
+    h2_electrolyzer_total = _safe_sum(dcbus_data, 'h2_electrolyzer_mw')
+    h2_fuelcell_total = _safe_sum(dcbus_data, 'h2_fuelcell_mw')
     
     # Curtailment (출력제한) — DC Bus 실제 데이터 사용
     curtailment_total = _safe_sum(dcbus_data, 'curtailment_mw')
-    
-    # 에너지 밸런스 보정: 입력 합 = 출력 합이 되도록
-    total_in = pv_total + hess_discharge_total + h2_fuelcell_total + grid_import_total
-    total_out = aidc_total + hess_charge_total + h2_electrolyzer_total + grid_export_total + curtailment_total
-    balance_gap = total_in - total_out
-    if abs(balance_gap) > 0.1:
-        # 잔여 불균형은 curtailment에 흡수 (양수) 또는 grid import 보정 (음수)
-        if balance_gap > 0:
-            curtailment_total += balance_gap
-        else:
-            grid_import_total += abs(balance_gap)
     
     # === Sankey 다이어그램 (GDI 스타일: 깔끔한 좌→우, 세련된 색상) ===
     
