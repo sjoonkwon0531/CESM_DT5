@@ -452,74 +452,45 @@ def display_results():
     """시뮬레이션 결과 표시"""
     data = st.session_state.simulation_data
     
-    # 페이지 네비게이션 — 드롭다운 + 퀵버튼
-    PAGE_LIST = [
-        "📊 전력 균형", "☀️ PV 발전", "🖥️ AIDC 부하", 
-        "🔄 DC Bus", "🔋 HESS", "⚡ H₂ 시스템", "🔌 그리드",
-        "🤖 AI-EMS", "🌍 탄소 회계", "💰 경제성", "📈 통계 분석",
-        "🏛️ 정책 시뮬레이터", "🏭 산업 상용화", "📋 투자 대시보드",
-        "🌏 국제 비교", "🦆 Duck Curve", "📥 데이터 다운로드", "📚 References"
-    ]
+    # 2단 탭 구조: 상위 카테고리(radio) → 하위 탭
+    category = st.radio(
+        "📑 카테고리",
+        ["⚡ 코어 시스템", "🔋 에너지 저장", "💰 경제·분석", "🏛️ 전략·정책", "🌏 글로벌·데이터"],
+        horizontal=True, label_visibility="collapsed"
+    )
     
-    # 2단 네비게이션: 카테고리 버튼 + 드롭다운
-    nav_col1, nav_col2 = st.columns([1, 3])
-    with nav_col1:
-        page_idx = st.selectbox(
-            "📑 페이지 선택",
-            range(len(PAGE_LIST)),
-            format_func=lambda i: PAGE_LIST[i],
-            key="page_nav",
-            label_visibility="collapsed"
-        )
-    with nav_col2:
-        # 카테고리별 퀵 버튼
-        cats = st.columns(5)
-        with cats[0]:
-            if st.button("⚡ 코어", use_container_width=True, help="전력/PV/AIDC/Bus"):
-                st.session_state.page_nav = 0
-                st.rerun()
-        with cats[1]:
-            if st.button("🔋 저장", use_container_width=True, help="HESS/H₂/Grid/EMS"):
-                st.session_state.page_nav = 4
-                st.rerun()
-        with cats[2]:
-            if st.button("💰 경제", use_container_width=True, help="탄소/경제/통계"):
-                st.session_state.page_nav = 8
-                st.rerun()
-        with cats[3]:
-            if st.button("🏛️ 전략", use_container_width=True, help="정책/산업/투자"):
-                st.session_state.page_nav = 11
-                st.rerun()
-        with cats[4]:
-            if st.button("🌏 분석", use_container_width=True, help="국제/Duck/다운/Ref"):
-                st.session_state.page_nav = 14
-                st.rerun()
+    if category == "⚡ 코어 시스템":
+        t1, t2, t3, t4 = st.tabs(["📊 전력 균형", "☀️ PV 발전", "🖥️ AIDC 부하", "🔄 DC Bus"])
+        with t1: display_power_balance(data)
+        with t2: display_pv_results(data)
+        with t3: display_aidc_results(data)
+        with t4: display_dcbus_results(data)
     
-    st.markdown("---")
+    elif category == "🔋 에너지 저장":
+        t1, t2, t3, t4 = st.tabs(["🔋 HESS", "⚡ H₂ 시스템", "🔌 그리드", "🤖 AI-EMS"])
+        with t1: display_hess_results(data)
+        with t2: display_h2_results(data)
+        with t3: display_grid_results(data)
+        with t4: display_ems_results(data)
     
-    # 페이지 렌더링
-    page_funcs = [
-        lambda: display_power_balance(data),
-        lambda: display_pv_results(data),
-        lambda: display_aidc_results(data),
-        lambda: display_dcbus_results(data),
-        lambda: display_hess_results(data),
-        lambda: display_h2_results(data),
-        lambda: display_grid_results(data),
-        lambda: display_ems_results(data),
-        lambda: display_carbon_results(data),
-        lambda: display_economics_results(data),
-        lambda: display_statistics(data),
-        lambda: display_policy_simulator(),
-        lambda: display_industry_model(),
-        lambda: display_investment_dashboard(),
-        lambda: display_international_comparison(data),
-        lambda: display_duck_curve(data),
-        lambda: display_data_download(data),
-        lambda: display_references(),
-    ]
+    elif category == "💰 경제·분석":
+        t1, t2, t3 = st.tabs(["🌍 탄소 회계", "💰 경제성", "📈 통계 분석"])
+        with t1: display_carbon_results(data)
+        with t2: display_economics_results(data)
+        with t3: display_statistics(data)
     
-    page_funcs[page_idx]()
+    elif category == "🏛️ 전략·정책":
+        t1, t2, t3 = st.tabs(["🏛️ 정책 시뮬레이터", "🏭 산업 상용화", "📋 투자 대시보드"])
+        with t1: display_policy_simulator()
+        with t2: display_industry_model()
+        with t3: display_investment_dashboard()
+    
+    elif category == "🌏 글로벌·데이터":
+        t1, t2, t3, t4 = st.tabs(["🌏 국제 비교", "🦆 Duck Curve", "📥 데이터 다운로드", "📚 References"])
+        with t1: display_international_comparison(data)
+        with t2: display_duck_curve(data)
+        with t3: display_data_download(data)
+        with t4: display_references()
 
 
 def display_static_energy_flow_sankey(data):
