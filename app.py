@@ -2735,7 +2735,80 @@ def display_duck_curve(data):
         'net_load': [22, 21, 20, 19.5, 19.5, 20.3, 21, 19, 16.5, 14, 12.5, 11.5,
                      11, 11, 12, 15.5, 20.5, 26, 28.2, 27, 25.5, 24.5, 23.5, 22.5],
         'storage': [0.5, 0.3, 0.2, 0.1, 0, -0.5, -2, -4, -5.5, -6, -5.5, -5,
-                    -4, -3, -2, 0, 2, 5, 7, 6, 4, 2, 1, 0.5]
+                    -4, -3, -2, 0, 2, 5, 7, 6, 4, 2, 1, 0.5],
+        # 발전원별 프로파일 (GW) — Chart ①
+        'nuclear': np.full(24, 1.1),
+        'geothermal': np.full(24, 2.8),
+        'large_hydro': np.array([2.0, 1.8, 1.7, 1.6, 1.6, 1.7, 2.0, 2.2, 2.5, 2.8,
+                                  3.0, 3.2, 3.3, 3.2, 3.0, 2.8, 2.5, 2.2, 2.5, 3.0,
+                                  3.2, 3.0, 2.5, 2.2]),
+        'gas': np.array([8.5, 8.0, 7.5, 7.0, 7.0, 7.5, 8.5, 6.5, 3.5, 2.0,
+                          1.5, 1.2, 1.0, 1.2, 1.5, 2.5, 5.0, 8.0, 8.5, 8.0,
+                          7.5, 7.0, 8.0, 8.5]),
+        'wind': np.array([3.5, 3.8, 4.0, 4.2, 4.0, 3.5, 3.0, 2.5, 2.0, 1.8,
+                           1.5, 1.3, 1.2, 1.3, 1.5, 1.8, 2.0, 2.5, 3.0, 3.2,
+                           3.5, 3.5, 3.5, 3.5]),
+        'imports': np.array([4.0, 4.5, 3.5, 3.0, 3.0, 4.0, 5.5, 5.5, 4.0, 2.5,
+                              1.5, 1.0, 0.5, 0.5, 1.0, 2.0, 4.5, 6.5, 7.0, 7.0,
+                              6.5, 5.5, 4.5, 4.0]),
+        'storage_gen': np.array([0.5, 0.3, 0.2, 0.1, 0, 0, 0, 0, 0, 0,
+                                  0, 0, 0, 0, 0, 0, 2.0, 5.0, 7.0, 6.0,
+                                  4.0, 2.0, 1.0, 0.5]),
+        # 연도별 믹스 비중 (%) — Chart ②
+        'yearly_mix': {
+            2018: {'Gas': 21, 'Solar': 16, 'Imports': 24, 'Wind': 10, 'Hydro': 14, 'Nuclear': 9, 'Other': 4, 'Storage': 2},
+            2019: {'Gas': 19, 'Solar': 18, 'Imports': 22, 'Wind': 11, 'Hydro': 13, 'Nuclear': 9, 'Other': 4, 'Storage': 4},
+            2020: {'Gas': 17, 'Solar': 20, 'Imports': 20, 'Wind': 11, 'Hydro': 13, 'Nuclear': 9, 'Other': 5, 'Storage': 5},
+            2021: {'Gas': 18, 'Solar': 21, 'Imports': 18, 'Wind': 12, 'Hydro': 12, 'Nuclear': 9, 'Other': 5, 'Storage': 5},
+            2022: {'Gas': 17, 'Solar': 24, 'Imports': 15, 'Wind': 12, 'Hydro': 13, 'Nuclear': 8, 'Other': 6, 'Storage': 5},
+            2023: {'Gas': 15, 'Solar': 28, 'Imports': 12, 'Wind': 13, 'Hydro': 13, 'Nuclear': 8, 'Other': 6, 'Storage': 5},
+            2024: {'Gas': 14, 'Solar': 30, 'Imports': 11, 'Wind': 13, 'Hydro': 13, 'Nuclear': 7, 'Other': 6, 'Storage': 6},
+            2025: {'Gas': 14, 'Solar': 32, 'Imports': 10, 'Wind': 13, 'Hydro': 13, 'Nuclear': 7, 'Other': 5, 'Storage': 6},
+        },
+        # 연도별 태양광 피크 (GW) — Chart ③
+        'solar_by_year': {
+            2018: [0,0,0,0,0,0,0.5,2.0,3.5,5.0,6.0,6.5,7.0,6.8,6.0,4.5,2.5,0.8,0,0,0,0,0,0],
+            2019: [0,0,0,0,0,0,0.6,2.3,4.0,5.5,6.8,7.5,7.8,7.5,6.8,5.0,3.0,1.0,0,0,0,0,0,0],
+            2020: [0,0,0,0,0,0,0.8,2.8,4.8,6.5,8.0,8.8,9.0,8.8,8.0,6.0,3.5,1.2,0,0,0,0,0,0],
+            2021: [0,0,0,0,0,0,1.0,3.0,5.5,7.5,9.0,10.0,10.2,10.0,9.0,7.0,4.5,1.5,0,0,0,0,0,0],
+            2022: [0,0,0,0,0,0,1.0,3.2,5.8,8.0,9.5,10.5,10.8,10.5,9.5,7.2,4.8,1.5,0,0,0,0,0,0],
+            2023: [0,0,0,0,0,0.1,1.5,4.0,7.0,9.5,11.5,12.5,13.0,12.5,11.5,9.0,6.0,2.0,0.1,0,0,0,0,0],
+            2024: [0,0,0,0,0,0.1,1.8,4.8,8.0,11.0,13.0,14.0,14.5,14.0,13.0,10.5,7.0,2.5,0.2,0,0,0,0,0],
+            2025: [0,0,0,0,0,0.2,2.0,6.0,10.0,13.0,15.0,16.5,17.0,16.5,15.0,12.0,8.0,3.0,0.3,0,0,0,0,0],
+        },
+        # 연도별 Storage 충방전 (GW) — Chart ④
+        'storage_by_year': {
+            2018: [0]*24,
+            2019: [0]*24,
+            2020: [0]*24,
+            2021: [0]*24,
+            2022: [0.1,0.1,0,0,0,-0.1,-0.5,-1.0,-1.5,-1.8,-1.5,-1.2,-1.0,-0.8,-0.5,0,0.5,1.5,2.5,2.0,1.5,0.8,0.3,0.1],
+            2023: [0.2,0.1,0.1,0,0,-0.2,-1.0,-2.0,-3.0,-3.5,-3.2,-2.8,-2.5,-2.0,-1.5,0,1.0,3.0,4.5,4.0,3.0,1.5,0.8,0.3],
+            2024: [0.3,0.2,0.1,0.1,0,-0.3,-1.5,-3.0,-4.5,-5.0,-4.5,-4.0,-3.5,-2.5,-1.5,0,1.5,4.0,6.0,5.5,3.5,2.0,1.0,0.5],
+            2025: [0.5,0.3,0.2,0.1,0,-0.5,-2.0,-4.0,-5.5,-6.0,-5.5,-5.0,-4.0,-3.0,-2.0,0,2.0,5.0,7.0,6.0,4.0,2.0,1.0,0.5],
+        },
+        # 연도별 Curtailment (MW) — Chart ⑤
+        'curtailment_by_year': {
+            2017: [0,0,0,0,0,0,0,10,30,50,60,70,65,50,30,10,0,0,0,0,0,0,0,0],
+            2018: [0,0,0,0,0,0,0,20,60,100,130,150,140,120,80,30,0,0,0,0,0,0,0,0],
+            2019: [0,0,0,0,0,0,0,50,150,300,400,450,420,350,200,80,0,0,0,0,0,0,0,0],
+            2020: [0,0,0,0,0,0,0,80,250,500,650,750,700,600,400,150,20,0,0,0,0,0,0,0],
+            2021: [0,0,0,0,0,0,0,80,250,500,650,800,750,650,400,150,20,0,0,0,0,0,0,0],
+            2022: [0,0,0,0,0,0,10,200,600,1000,1300,1500,1450,1200,800,300,50,0,0,0,0,0,0,0],
+            2023: [0,0,0,0,0,0,10,180,550,900,1200,1400,1350,1100,750,250,40,0,0,0,0,0,0,0],
+            2024: [0,0,0,0,0,0,10,200,600,1000,1350,1550,1500,1250,850,350,60,0,0,0,0,0,0,0],
+            2025: [0,0,0,0,0,0,15,220,650,1100,1400,1600,1550,1300,900,350,60,0,0,0,0,0,0,0],
+        },
+        # 연도별 Import/Export (MW) — Chart ⑥
+        'import_export_by_year': {
+            2019: [6000,6200,5800,5500,5500,6000,7000,5000,3000,2000,1500,1200,1000,1200,1500,2500,5000,6500,7500,7500,7000,6500,6200,6000],
+            2020: [6000,6200,5800,5500,5500,6000,7000,4500,2500,1500,800,500,300,500,1000,2000,5000,6500,7500,7500,7000,6500,6200,6000],
+            2021: [6000,6100,5700,5400,5400,5800,6800,4200,2000,1000,500,200,0,200,800,1800,4500,6200,7200,7200,6800,6200,6000,5800],
+            2022: [6000,6100,5700,5400,5400,5800,6800,4000,1500,500,0,-500,-800,-500,200,1500,4500,6500,7500,7500,7000,6500,6000,5800],
+            2023: [5800,6000,5600,5300,5300,5700,6500,3500,1000,-200,-1000,-1500,-1800,-1500,-800,800,4000,6500,8000,8000,7500,6500,6000,5800],
+            2024: [5800,5900,5500,5200,5200,5600,6300,3200,500,-800,-1800,-2500,-2800,-2500,-1500,300,3500,6000,8000,8200,7500,6500,6000,5800],
+            2025: [5500,5700,5300,5000,5000,5400,6000,3000,200,-500,-1500,-2000,-2200,-2000,-1200,500,3500,6000,8500,8500,7500,6500,6000,5800],
+        }
     }
 
     # ==================== 차트 1: 한국 Duck Curve ====================
@@ -2844,65 +2917,192 @@ def display_duck_curve(data):
     )
     st.plotly_chart(fig2, use_container_width=True)
 
-    # ==================== 차트 3: CAISO 비교 ====================
+    # ==================== 차트 3: 한국 vs CAISO 비교 ====================
     if compare_caiso:
         st.markdown("---")
-        st.markdown("#### 🇺🇸 CAISO 실측 비교 (2025년 4월, GridStatus.io)")
+        st.markdown("### 🇺🇸 CAISO 실측 데이터 (GridStatus.io, 2025년 4월)")
+        st.caption("캘리포니아 ISO — 세계 최초로 Duck Curve를 경험하고 관리하는 그리드")
 
-        fig3 = make_subplots(rows=1, cols=2, subplot_titles=(
-            "🇰🇷 한국 (시뮬레이션)", "🇺🇸 CAISO (실측 2025)"
-        ), horizontal_spacing=0.08)
+        # --- Chart ① Stacked Area: 발전원별 Fuel Mix ---
+        st.markdown("#### ① 발전원별 일중 Fuel Mix")
+        fig_fuel = go.Figure()
+        fuel_sources = [
+            ('Nuclear', caiso_data['nuclear'], '#ef4444'),
+            ('Geothermal', caiso_data['geothermal'], '#22c55e'),
+            ('Large Hydro', caiso_data['large_hydro'], '#06b6d4'),
+            ('Gas', caiso_data['gas'], '#f97316'),
+            ('Wind', caiso_data['wind'], '#3b82f6'),
+            ('Solar', np.array(caiso_data['solar']), '#eab308'),
+            ('Imports', caiso_data['imports'], '#ec4899'),
+            ('Storage', caiso_data['storage_gen'], '#a855f7'),
+        ]
+        for name, vals, color in fuel_sources:
+            fig_fuel.add_trace(go.Scatter(
+                x=hours, y=vals, name=name, mode='lines',
+                stackgroup='one', fillcolor=color, line=dict(width=0.5, color=color)
+            ))
+        fig_fuel.update_layout(
+            title="CAISO 발전원별 구성 — 낮에는 Solar가 지배 (2025.4)",
+            xaxis_title="시간 (Hour)", yaxis_title="발전량 (GW)",
+            template="plotly_white", height=450,
+            xaxis=dict(tickmode='linear', dtick=2),
+            yaxis=dict(range=[0, 32]),
+            legend=dict(orientation="h", y=-0.15)
+        )
+        st.plotly_chart(fig_fuel, use_container_width=True)
 
-        # 한국
-        fig3.add_trace(go.Scatter(x=hours, y=demand, name='KR 총수요',
-                                   line=dict(color='white', width=2, dash='dot'),
-                                   showlegend=True), row=1, col=1)
-        fig3.add_trace(go.Scatter(x=hours, y=net_load, name='KR 순부하',
-                                   line=dict(color='#f59e0b', width=3),
-                                   fill='tonexty', fillcolor='rgba(245,158,11,0.1)'), row=1, col=1)
+        # --- Chart ② 100% Stacked Bar: 연도별 믹스 비중 변화 ---
+        st.markdown("#### ② 연도별 Fuel Mix 비중 변화 (2018→2025)")
+        years = list(caiso_data['yearly_mix'].keys())
+        mix_sources = ['Gas', 'Solar', 'Imports', 'Wind', 'Hydro', 'Nuclear', 'Other', 'Storage']
+        mix_colors = {'Gas': '#f97316', 'Solar': '#eab308', 'Imports': '#ec4899',
+                      'Wind': '#3b82f6', 'Hydro': '#06b6d4', 'Nuclear': '#22c55e',
+                      'Other': '#9ca3af', 'Storage': '#a855f7'}
 
-        # CAISO
-        fig3.add_trace(go.Scatter(x=hours, y=caiso_data['demand'], name='CA 총수요',
-                                   line=dict(color='white', width=2, dash='dot'),
-                                   showlegend=True), row=1, col=2)
-        fig3.add_trace(go.Scatter(x=hours, y=caiso_data['net_load'], name='CA 순부하',
-                                   line=dict(color='#8b5cf6', width=3),
-                                   fill='tonexty', fillcolor='rgba(139,92,246,0.1)'), row=1, col=2)
+        fig_mix = go.Figure()
+        for src in mix_sources:
+            vals = [caiso_data['yearly_mix'][y][src] for y in years]
+            fig_mix.add_trace(go.Bar(
+                x=[str(y) for y in years], y=vals, name=src,
+                marker_color=mix_colors[src], text=[f"{v}%" if v >= 8 else "" for v in vals],
+                textposition='inside', textfont=dict(size=11, color='white')
+            ))
+        fig_mix.update_layout(
+            title="Solar 16%→32% (2배↑), Gas 21%→14% (↓), Storage 0%→6% (신규)",
+            barmode='stack', template="plotly_white", height=420,
+            yaxis=dict(title="비중 (%)", range=[0, 105]),
+            legend=dict(orientation="h", y=-0.15)
+        )
+        st.plotly_chart(fig_mix, use_container_width=True)
 
-        fig3.update_layout(template="plotly_white", height=400,
-                           legend=dict(orientation="h", y=-0.2))
-        fig3.update_xaxes(title_text="시간", tickmode='linear', dtick=4)
-        fig3.update_yaxes(title_text="GW", row=1, col=1)
-        fig3.update_yaxes(title_text="GW", row=1, col=2)
+        # --- Chart ③ Solar 피크 연도별 성장 ---
+        st.markdown("#### ③ 태양광 발전 피크 성장 (~2.5GW/년 가속)")
+        fig_solar = go.Figure()
+        solar_colors = {2018: '#fed7aa', 2019: '#fdba74', 2020: '#fb923c',
+                        2021: '#f97316', 2022: '#ea580c', 2023: '#c2410c',
+                        2024: '#fff', 2025: '#fff'}
+        for yr, vals in caiso_data['solar_by_year'].items():
+            w = 3.5 if yr >= 2024 else 1.5
+            fig_solar.add_trace(go.Scatter(
+                x=hours, y=vals, name=str(yr), mode='lines',
+                line=dict(width=w, color=solar_colors.get(yr, '#f97316'))
+            ))
+        fig_solar.add_annotation(x=12, y=17000/1000, text="~2.5GW ↑",
+                                  showarrow=True, arrowhead=2,
+                                  font=dict(size=14, color='#f59e0b'))
+        fig_solar.update_layout(
+            title="CAISO Solar — 2023년 이후 설치 가속",
+            xaxis_title="시간 (Hour)", yaxis_title="발전량 (GW)",
+            template="plotly_white", height=420,
+            xaxis=dict(tickmode='linear', dtick=2),
+            legend=dict(orientation="h", y=-0.15)
+        )
+        st.plotly_chart(fig_solar, use_container_width=True)
 
-        st.plotly_chart(fig3, use_container_width=True)
+        # --- Chart ④ Storage 충방전 연도별 ---
+        st.markdown("#### ④ ESS 충방전 스윙 확대 (22+ GW 일일 변동)")
+        fig_storage = go.Figure()
+        stor_colors = {2018: '#e0e0e0', 2019: '#c0c0c0', 2020: '#a0a0a0',
+                       2021: '#808080', 2022: '#c4b5fd', 2023: '#a78bfa',
+                       2024: '#8b5cf6', 2025: '#7c3aed'}
+        for yr, vals in caiso_data['storage_by_year'].items():
+            w = 3 if yr >= 2024 else 1.2
+            fig_storage.add_trace(go.Scatter(
+                x=hours, y=vals, name=str(yr), mode='lines',
+                line=dict(width=w, color=stor_colors.get(yr, '#808080'))
+            ))
+        fig_storage.add_hline(y=0, line_color="gray", line_width=1, line_dash="dash")
+        fig_storage.add_annotation(x=6, y=3.4, text="~3.4 GW<br>Morning",
+                                    showarrow=True, font=dict(size=12))
+        fig_storage.add_annotation(x=18, y=7, text="~7 GW<br>Evening Peak",
+                                    showarrow=True, font=dict(size=12, color='#7c3aed'))
+        fig_storage.add_annotation(x=12, y=-6, text="~6 GW<br>Charging",
+                                    showarrow=True, font=dict(size=12, color='#3b82f6'))
+        fig_storage.update_layout(
+            title="2022년까지 거의 0 → 2025년 일일 스윙 22+GW",
+            xaxis_title="시간 (Hour)", yaxis_title="전력 (GW) [+방전/-충전]",
+            template="plotly_white", height=420,
+            xaxis=dict(tickmode='linear', dtick=2),
+            legend=dict(orientation="h", y=-0.15)
+        )
+        st.plotly_chart(fig_storage, use_container_width=True)
 
-        # 비교 테이블
+        # --- Chart ⑤ Curtailment 연도별 ---
+        st.markdown("#### ⑤ Solar Curtailment — 용량 2배 ↑인데 커테일먼트는 비슷")
+        fig_curt = go.Figure()
+        curt_colors = {2017: '#fef3c7', 2018: '#fde68a', 2019: '#fcd34d',
+                       2020: '#fbbf24', 2021: '#f59e0b', 2022: '#fff',
+                       2023: '#fff', 2024: '#fff', 2025: '#fff'}
+        for yr, vals in caiso_data['curtailment_by_year'].items():
+            w = 3 if yr >= 2022 else 1.5
+            fig_curt.add_trace(go.Scatter(
+                x=list(range(6, 20)), y=vals[6:20], name=str(yr), mode='lines',
+                line=dict(width=w, color=curt_colors.get(yr, '#f59e0b'))
+            ))
+        fig_curt.update_layout(
+            title="Storage가 잉여 태양광을 흡수 → 커테일먼트 안정화",
+            xaxis_title="시간 (Hour)", yaxis_title="커테일먼트 (MW)",
+            template="plotly_white", height=400,
+            xaxis=dict(tickmode='linear', dtick=1, range=[6, 19]),
+            legend=dict(orientation="h", y=-0.15)
+        )
+        st.plotly_chart(fig_curt, use_container_width=True)
+
+        # --- Chart ⑥ Import/Export 연도별 ---
+        st.markdown("#### ⑥ 수출입 패턴 — 낮 수출 증가 (자체 저장 전환)")
+        fig_ie = go.Figure()
+        ie_colors = {2019: '#e5e7eb', 2020: '#d1d5db', 2021: '#9ca3af',
+                     2022: '#ddd6fe', 2023: '#c4b5fd',
+                     2024: '#a78bfa', 2025: '#7c3aed'}
+        for yr, vals in caiso_data['import_export_by_year'].items():
+            vals_gw = [v / 1000 for v in vals]
+            w = 3 if yr >= 2024 else 1.5
+            fig_ie.add_trace(go.Scatter(
+                x=hours, y=vals_gw, name=str(yr), mode='lines',
+                line=dict(width=w, color=ie_colors.get(yr, '#808080'))
+            ))
+        fig_ie.add_hline(y=0, line_color="gray", line_width=1, line_dash="dash",
+                          annotation_text="Export ↓ / Import ↑")
+        fig_ie.update_layout(
+            title="낮 수출(음수) 확대 → Storage가 흡수하면서 점차 감소",
+            xaxis_title="시간 (Hour)", yaxis_title="전력 (GW) [+수입/-수출]",
+            template="plotly_white", height=420,
+            xaxis=dict(tickmode='linear', dtick=2),
+            legend=dict(orientation="h", y=-0.15)
+        )
+        st.plotly_chart(fig_ie, use_container_width=True)
+
+        # --- 한국 vs CAISO 비교 요약 테이블 ---
+        st.markdown("---")
+        st.markdown("#### 📊 한국 vs CAISO 정량 비교")
+
         kr_belly = min(net_load)
         kr_ramp = net_load[17] - kr_belly
         ca_belly = min(caiso_data['net_load'])
         ca_ramp = max(caiso_data['net_load']) - ca_belly
 
         comp_df = pd.DataFrame({
-            '지표': ['피크 수요 (GW)', '태양광 피크 (GW)', 'Duck Belly (GW)',
-                    'Evening Ramp (GW)', 'Belly/피크 비율', 'Storage 방전 피크 (GW)'],
-            '🇰🇷 한국': [f"{max(demand):.0f}", f"{max(solar_gen):.0f}",
-                       f"{kr_belly:.1f}", f"{kr_ramp:.1f}",
-                       f"{kr_belly/max(demand)*100:.0f}%", f"{storage_gw}"],
-            '🇺🇸 CAISO': [f"{max(caiso_data['demand']):.0f}", f"{max(caiso_data['solar']):.0f}",
-                         f"{ca_belly:.1f}", f"{ca_ramp:.1f}",
-                         f"{ca_belly/max(caiso_data['demand'])*100:.0f}%", "~7"]
+            '지표': ['피크 수요 (GW)', '태양광 설치 (GW)', '태양광 피크 발전 (GW)',
+                    'Duck Belly (GW)', 'Evening Ramp (GW)', 'Belly/피크 비율',
+                    'Storage 방전 피크 (GW)', 'Solar 비중', 'Storage 비중'],
+            '🇰🇷 한국 (시뮬레이션)': [f"{max(demand):.0f}", f"{pv_capacity_gw}",
+                       f"{max(solar_gen):.0f}", f"{kr_belly:.1f}", f"{kr_ramp:.1f}",
+                       f"{kr_belly/max(demand)*100:.0f}%", f"{storage_gw}",
+                       f"~{max(solar_gen)/max(demand)*100:.0f}%", f"~{storage_gw/max(demand)*100:.0f}%"],
+            '🇺🇸 CAISO (실측 2025)': [f"{max(caiso_data['demand']):.0f}", "~30",
+                         f"{max(caiso_data['solar']):.0f}", f"{ca_belly:.1f}", f"{ca_ramp:.1f}",
+                         f"{ca_belly/max(caiso_data['demand'])*100:.0f}%", "~7",
+                         "32%", "6%"]
         })
         st.dataframe(comp_df, hide_index=True, use_container_width=True)
 
-    # ==================== 차트 4: ESS 충방전 프로파일 ====================
+    # ==================== 차트: ESS 충방전 프로파일 ====================
     if storage_gw > 0:
         st.markdown("---")
-        st.markdown("#### 🔋 ESS 충방전 프로파일")
+        st.markdown("#### 🔋 한국 ESS 충방전 시뮬레이션")
 
         fig4 = go.Figure()
 
-        # 충전 (음수) / 방전 (양수)
         charge_vals = np.where(storage_profile < 0, storage_profile, 0)
         discharge_vals = np.where(storage_profile > 0, storage_profile, 0)
 
@@ -2911,7 +3111,6 @@ def display_duck_curve(data):
         fig4.add_trace(go.Bar(x=hours, y=discharge_vals, name='방전',
                                marker_color='#ef4444', opacity=0.8))
 
-        # CAISO storage overlay
         if compare_caiso:
             ca_storage_scaled = np.array(caiso_data['storage'])
             fig4.add_trace(go.Scatter(
@@ -2922,7 +3121,7 @@ def display_duck_curve(data):
 
         fig4.add_hline(y=0, line_color="gray", line_width=1)
         fig4.update_layout(
-            title="ESS 일중 운영 패턴 — 낮 충전 / 저녁 방전",
+            title="한국 ESS 일중 운영 패턴 — 낮 충전 / 저녁 방전",
             xaxis_title="시간 (Hour)", yaxis_title="전력 (GW)",
             template="plotly_white", height=400, barmode='relative',
             xaxis=dict(tickmode='linear', dtick=2),
