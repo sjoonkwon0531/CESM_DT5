@@ -60,27 +60,40 @@ st.markdown("""
 <style>
 /* 탭 바: 가로 스크롤, 줄바꿈 방지 */
 div[data-testid="stTabs"] > div[role="tablist"] {
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
     flex-wrap: nowrap !important;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 transparent;
-    padding-bottom: 4px;
+    scrollbar-color: #94a3b8 #f1f5f9;
+    padding-bottom: 6px;
+    gap: 0px !important;
 }
 div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar {
-    height: 6px;
+    height: 8px;
+    display: block !important;
 }
 div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar-track {
-    background: transparent;
+    background: #f1f5f9;
+    border-radius: 4px;
 }
 div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
+    background: #94a3b8;
+    border-radius: 4px;
+}
+div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
 }
 div[data-testid="stTabs"] > div[role="tablist"] button {
-    white-space: nowrap;
-    flex-shrink: 0;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    min-width: fit-content !important;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem !important;
+}
+/* 탭 컨테이너 max-width 해제 */
+div[data-testid="stTabs"] {
+    max-width: 100% !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -159,20 +172,34 @@ def create_main_dashboard():
         )
         
         st.write("**워크로드 믹스**")
-        llm_ratio = st.slider("LLM 추론 비율", 0.0, 1.0, 0.4, 0.1, key="llm_ratio")
-        training_ratio = st.slider("AI 훈련 비율", 0.0, 1.0, 0.4, 0.1, key="training_ratio")
-        moe_ratio = st.slider("MoE 비율", 0.0, 1.0, 0.2, 0.1, key="moe_ratio")
+        st.caption("세 비율의 합 = 1.0 (자동 정규화)")
+        llm_ratio = st.slider("LLM 추론 비율", 0.0, 1.0, 0.4, 0.05, key="llm_ratio")
+        # 남은 비율 계산하여 training+moe 상한 제한
+        remaining_after_llm = 1.0 - llm_ratio
+        training_default = min(0.4, remaining_after_llm)
+        training_ratio = st.slider("AI 훈련 비율", 0.0, remaining_after_llm, 
+                                    training_default, 0.05, key="training_ratio")
+        remaining_after_train = max(0.0, remaining_after_llm - training_ratio)
+        moe_ratio = remaining_after_train  # 자동 결정
         
-        # 정규화 및 세션 상태에 저장
+        # 합계 표시
         total_ratio = llm_ratio + training_ratio + moe_ratio
-        if total_ratio > 0:
-            workload_mix = {
-                'llm': llm_ratio / total_ratio,
-                'training': training_ratio / total_ratio,
-                'moe': moe_ratio / total_ratio
-            }
-        else:
-            workload_mix = {'llm': 1.0, 'training': 0.0, 'moe': 0.0}
+        col_r1, col_r2, col_r3 = st.columns(3)
+        with col_r1:
+            st.metric("추론", f"{llm_ratio:.0%}")
+        with col_r2:
+            st.metric("훈련", f"{training_ratio:.0%}")
+        with col_r3:
+            st.metric("MoE", f"{moe_ratio:.0%}")
+        
+        if abs(total_ratio - 1.0) > 0.01:
+            st.warning(f"⚠️ 합계 {total_ratio:.2f} ≠ 1.0")
+        
+        workload_mix = {
+            'llm': llm_ratio,
+            'training': training_ratio,
+            'moe': moe_ratio
+        }
         
         st.session_state.workload_mix = workload_mix
         
