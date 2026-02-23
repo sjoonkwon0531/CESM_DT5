@@ -58,42 +58,48 @@ if 'weather_data' not in st.session_state:
 # 탭 바 가로 스크롤 + 클린 화이트 테마
 st.markdown("""
 <style>
-/* 탭 바: 가로 스크롤, 줄바꿈 방지 */
+/* 탭 바: 가로 스크롤 강제 */
 div[data-testid="stTabs"] > div[role="tablist"] {
-    overflow-x: auto !important;
+    overflow-x: scroll !important;
     overflow-y: hidden !important;
     flex-wrap: nowrap !important;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    scrollbar-color: #94a3b8 #f1f5f9;
-    padding-bottom: 6px;
-    gap: 0px !important;
+    scrollbar-width: auto;
+    scrollbar-color: #64748b #e2e8f0;
+    padding-bottom: 8px;
+    gap: 2px !important;
+    display: flex !important;
 }
 div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar {
-    height: 8px;
+    height: 10px !important;
     display: block !important;
 }
 div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 4px;
+    background: #e2e8f0;
+    border-radius: 5px;
 }
 div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar-thumb {
-    background: #94a3b8;
-    border-radius: 4px;
+    background: #64748b;
+    border-radius: 5px;
+    border: 2px solid #e2e8f0;
 }
 div[data-testid="stTabs"] > div[role="tablist"]::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
+    background: #475569;
 }
 div[data-testid="stTabs"] > div[role="tablist"] button {
     white-space: nowrap !important;
     flex-shrink: 0 !important;
     min-width: fit-content !important;
-    font-size: 0.85rem;
-    padding: 0.4rem 0.8rem !important;
+    font-size: 0.82rem;
+    padding: 0.35rem 0.7rem !important;
 }
-/* 탭 컨테이너 max-width 해제 */
 div[data-testid="stTabs"] {
     max-width: 100% !important;
+    overflow: visible !important;
+}
+/* 탭 내부 gap 제거 */
+div[data-testid="stTabs"] > div[role="tablist"] > div {
+    flex-shrink: 0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -449,11 +455,11 @@ def display_results():
     # 탭 구성
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, \
         tab12, tab13, tab14, tab15, tab16, tab17, tab18 = st.tabs([
-        "📊 전력 균형", "☀️ PV 발전", "🖥️ AIDC 부하", 
-        "🔄 DC Bus", "🔋 HESS", "⚡ H₂ 시스템", "🔌 그리드",
-        "🤖 AI-EMS", "🌍 탄소 회계", "💰 경제성", "📈 통계 분석",
-        "🏛️ 정책 시뮬레이터", "🏭 산업 상용화", "📋 투자 대시보드",
-        "🌏 국제 비교", "🦆 Duck Curve", "📥 데이터 다운로드", "📚 References"
+        "📊 전력", "☀️ PV", "🖥️ AIDC", 
+        "🔄 Bus", "🔋 HESS", "⚡ H₂", "🔌 Grid",
+        "🤖 EMS", "🌍 탄소", "💰 경제", "📈 통계",
+        "🏛️ 정책", "🏭 산업", "📋 투자",
+        "🌏 국제", "🦆 Duck", "📥 다운", "📚 Ref"
     ])
     
     with tab1:
