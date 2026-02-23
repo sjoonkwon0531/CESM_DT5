@@ -1,7 +1,8 @@
 """
 M2. HESS (Hybrid Energy Storage System) 모듈
-5-layer 하이브리드 에너지 저장: Supercap + Li-ion BESS + RFB + CAES + H₂
+6-layer 하이브리드 에너지 저장: Supercap + Li-ion BESS + Na-ion BESS + RFB + CAES + H₂
 주파수 기반 부하 분리 및 SOC 밸런싱 제어
+Na-ion Ref: Nature Reviews Materials (2025) doi:10.1038/s41578-025-00857-4
 """
 import numpy as np
 import pandas as pd
@@ -158,7 +159,7 @@ class HESSTechnologyLayer:
 
 
 class HESSModule:
-    """5-Layer HESS 통합 모듈"""
+    """6-Layer HESS 통합 모듈"""
     
     def __init__(self):
         """HESS 모듈 초기화"""
@@ -204,7 +205,26 @@ class HESSModule:
             time_constant_range=(1.0, 3600.0)  # s ~ hr
         ))
         
-        # Layer 3: Redox Flow Battery (RFB)
+        # Layer 3: Na-ion BESS (Sodium-Ion Battery)
+        # Ref: Nature Reviews Materials (2025) - Next-gen anodes for SIBs
+        # Hard carbon anode, layered oxide cathode (CATL Naxtra architecture)
+        layers['na_ion'] = HESSTechnologyLayer(HESSLayerConfig(
+            name="Na-ion BESS",
+            capacity_kwh=1000000,  # 1,000 MWh
+            power_rating_kw=100000,  # 100 MW
+            response_time_ms=200,  # 200 ms (Li-ion보다 약간 느림)
+            efficiency_charge=0.92,
+            efficiency_discharge=0.92,
+            self_discharge_rate_per_hr=0.0003,  # 0.03% per hour
+            degradation_cycle_factor=1e-5,  # ~10,000 cycles (Li-ion 대비 2x)
+            degradation_temp_factor=1e-4,
+            operating_temp_range=(-40, 60),  # 광온도 범위 (SIB 핵심 장점)
+            capex_per_kwh=80,  # $80/kWh (Li-ion의 40%, Nat. Energy 2025)
+            opex_per_kwh_year=3,
+            time_constant_range=(3600.0, 43200.0)  # hr ~ 12hr (Li-ion과 RFB 사이)
+        ))
+        
+        # Layer 4: Redox Flow Battery (RFB)
         layers['rfb'] = HESSTechnologyLayer(HESSLayerConfig(
             name="Vanadium RFB",
             capacity_kwh=750000,  # 750 MWh
@@ -221,7 +241,7 @@ class HESSModule:
             time_constant_range=(3600.0, 86400.0)  # hr ~ day
         ))
         
-        # Layer 4: Compressed Air Energy Storage (CAES)
+        # Layer 5: Compressed Air Energy Storage (CAES)
         layers['caes'] = HESSTechnologyLayer(HESSLayerConfig(
             name="CAES",
             capacity_kwh=1000000,  # 1,000 MWh
@@ -238,7 +258,7 @@ class HESSModule:
             time_constant_range=(86400.0, 604800.0)  # day ~ week
         ))
         
-        # Layer 5: H₂ (연결은 M5와 연동)
+        # Layer 6: H₂ (연결은 M5와 연동)
         layers['h2'] = HESSTechnologyLayer(HESSLayerConfig(
             name="H2 Storage",
             capacity_kwh=5000000,  # 5,000 MWh (seasonal storage)
@@ -290,8 +310,8 @@ class HESSModule:
         allocation = {}
         remaining_power = total_power_request_kw
         
-        # 우선순위 기반 배분: Supercap → BESS → RFB → CAES → H₂
-        priority_order = ['supercap', 'bess', 'rfb', 'caes', 'h2']
+        # 우선순위 기반 배분: Supercap → Li-ion → Na-ion → RFB → CAES → H₂
+        priority_order = ['supercap', 'bess', 'na_ion', 'rfb', 'caes', 'h2']
         
         for layer_name in priority_order:
             if abs(remaining_power) < 1.0:  # 1kW 미만은 무시
@@ -406,7 +426,8 @@ class HESSModule:
         # 목표 SOC 범위 (레이어별 최적화)
         target_ranges = {
             'supercap': (0.4, 0.6),  # 즉시 응답용
-            'bess': (0.2, 0.8),      # 일중 변동용  
+            'bess': (0.2, 0.8),      # 일중 변동용 (Li-ion)
+            'na_ion': (0.2, 0.8),    # 중주기 저비용 (Na-ion)
             'rfb': (0.3, 0.7),       # 장주기용
             'caes': (0.4, 0.6),      # 주간 저장용
             'h2': (0.1, 0.9)         # 계절 저장용
