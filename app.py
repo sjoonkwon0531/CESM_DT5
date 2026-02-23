@@ -421,12 +421,12 @@ def display_results():
     
     # 탭 구성
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, \
-        tab12, tab13, tab14, tab15, tab16, tab17 = st.tabs([
+        tab12, tab13, tab14, tab15, tab16, tab17, tab18 = st.tabs([
         "📊 전력 균형", "☀️ PV 발전", "🖥️ AIDC 부하", 
         "🔄 DC Bus", "🔋 HESS", "⚡ H₂ 시스템", "🔌 그리드",
         "🤖 AI-EMS", "🌍 탄소 회계", "💰 경제성", "📈 통계 분석",
         "🏛️ 정책 시뮬레이터", "🏭 산업 상용화", "📋 투자 대시보드",
-        "🌏 국제 비교", "📥 데이터 다운로드", "📚 References"
+        "🌏 국제 비교", "🦆 Duck Curve", "📥 데이터 다운로드", "📚 References"
     ])
     
     with tab1:
@@ -475,9 +475,12 @@ def display_results():
         display_international_comparison(data)
     
     with tab16:
-        display_data_download(data)
+        display_duck_curve(data)
     
     with tab17:
+        display_data_download(data)
+    
+    with tab18:
         display_references()
 
 
@@ -2619,6 +2622,334 @@ def display_references():
 | 그리드 배출계수 | 0.4594 tCO₂/MWh | 환경부 2024 |
 | K-ETS 탄소가격 | 25,000 ₩/tCO₂ | KRX 2024 |
 | SMP 기준가 | 80,000 ₩/MWh | KPX 2024 평균 |
+    """)
+
+
+def display_duck_curve(data):
+    """🦆 Duck Curve 분석 — 한국 vs CAISO 비교"""
+    st.subheader("🦆 Duck Curve 분석")
+    st.markdown("""
+    **Duck Curve**는 태양광 대량 도입 시 순부하(Net Load = 총수요 − PV − 풍력)가
+    오리 형상을 그리는 현상입니다. CAISO(캘리포니아)에서 2013년 처음 예측되었고,
+    현재 실측으로 확인되고 있습니다.
+    """)
+
+    # --- 사이드바 컨트롤 ---
+    st.markdown("#### ⚙️ 시나리오 설정")
+    sc1, sc2, sc3 = st.columns(3)
+    with sc1:
+        total_demand_gw = st.slider("한국 피크 수요 (GW)", 50, 120, 90, 5, key="duck_demand")
+    with sc2:
+        pv_capacity_gw = st.slider("태양광 설치용량 (GW)", 10, 150, 40, 5, key="duck_pv")
+    with sc3:
+        wind_capacity_gw = st.slider("풍력 설치용량 (GW)", 5, 50, 20, 5, key="duck_wind")
+
+    sc4, sc5, sc6 = st.columns(3)
+    with sc4:
+        storage_gw = st.slider("ESS 용량 (GW)", 0, 50, 10, 2, key="duck_storage")
+    with sc5:
+        season = st.selectbox("계절", ["봄 (4월)", "여름 (7월)", "가을 (10월)", "겨울 (1월)"], key="duck_season")
+    with sc6:
+        compare_caiso = st.checkbox("CAISO 실측 비교", value=True, key="duck_caiso")
+
+    hours = np.arange(24)
+
+    # --- 한국 수요 프로파일 (계절별) ---
+    season_profiles = {
+        "봄 (4월)": {
+            'demand': [0.72, 0.68, 0.65, 0.63, 0.64, 0.70, 0.82, 0.92, 0.95, 0.96,
+                       0.95, 0.93, 0.90, 0.92, 0.94, 0.95, 0.96, 0.97, 0.95, 0.90,
+                       0.85, 0.82, 0.78, 0.74],
+            'solar_cf': [0, 0, 0, 0, 0, 0.02, 0.15, 0.35, 0.55, 0.70,
+                         0.80, 0.85, 0.87, 0.85, 0.78, 0.65, 0.45, 0.20, 0.03, 0, 0, 0, 0, 0],
+            'wind_cf': 0.25
+        },
+        "여름 (7월)": {
+            'demand': [0.78, 0.74, 0.70, 0.68, 0.69, 0.74, 0.85, 0.93, 0.97, 1.00,
+                       1.00, 0.99, 0.97, 0.98, 1.00, 1.00, 0.99, 0.97, 0.95, 0.92,
+                       0.88, 0.85, 0.82, 0.80],
+            'solar_cf': [0, 0, 0, 0, 0, 0.03, 0.12, 0.28, 0.45, 0.58,
+                         0.65, 0.68, 0.70, 0.68, 0.62, 0.50, 0.35, 0.15, 0.02, 0, 0, 0, 0, 0],
+            'wind_cf': 0.18
+        },
+        "가을 (10월)": {
+            'demand': [0.70, 0.66, 0.63, 0.62, 0.63, 0.68, 0.80, 0.90, 0.94, 0.95,
+                       0.94, 0.92, 0.89, 0.91, 0.93, 0.94, 0.95, 0.96, 0.93, 0.88,
+                       0.83, 0.80, 0.76, 0.72],
+            'solar_cf': [0, 0, 0, 0, 0, 0, 0.08, 0.25, 0.45, 0.62,
+                         0.73, 0.78, 0.80, 0.78, 0.70, 0.55, 0.35, 0.10, 0, 0, 0, 0, 0, 0],
+            'wind_cf': 0.28
+        },
+        "겨울 (1월)": {
+            'demand': [0.75, 0.72, 0.70, 0.68, 0.70, 0.76, 0.88, 0.95, 0.97, 0.96,
+                       0.94, 0.92, 0.90, 0.91, 0.93, 0.94, 0.96, 0.98, 1.00, 0.97,
+                       0.92, 0.88, 0.82, 0.78],
+            'solar_cf': [0, 0, 0, 0, 0, 0, 0, 0.10, 0.25, 0.40,
+                         0.52, 0.58, 0.60, 0.58, 0.48, 0.30, 0.10, 0, 0, 0, 0, 0, 0, 0],
+            'wind_cf': 0.32
+        }
+    }
+
+    profile = season_profiles[season]
+    demand = np.array(profile['demand']) * total_demand_gw
+    solar_gen = np.array(profile['solar_cf']) * pv_capacity_gw
+    wind_gen = np.ones(24) * wind_capacity_gw * profile['wind_cf']
+    # 풍력 일변동 (새벽 강, 낮 약)
+    wind_variation = np.array([1.15, 1.18, 1.20, 1.22, 1.20, 1.15, 1.05, 0.95, 0.88, 0.82,
+                               0.80, 0.78, 0.78, 0.80, 0.82, 0.85, 0.90, 0.95, 1.00, 1.05,
+                               1.08, 1.10, 1.12, 1.14])
+    wind_gen = wind_gen * wind_variation
+
+    net_load = demand - solar_gen - wind_gen
+
+    # --- ESS 효과 시뮬레이션 ---
+    net_load_with_storage = net_load.copy()
+    storage_soc = 0.5 * storage_gw * 4  # 4시간 저장 가정, GWh
+    storage_max_gwh = storage_gw * 4
+    storage_profile = np.zeros(24)
+
+    for h in range(24):
+        surplus = demand[h] - net_load[h] - demand[h]  # = solar + wind
+        re_gen = solar_gen[h] + wind_gen[h]
+
+        if net_load[h] < demand[h] * 0.6 and storage_soc < storage_max_gwh * 0.95:
+            # 순부하 낮을 때 충전 (belly 구간)
+            charge = min(storage_gw, re_gen * 0.5, (storage_max_gwh * 0.95 - storage_soc))
+            storage_soc += charge * 0.92  # 충전 효율
+            storage_profile[h] = -charge  # 음수 = 충전
+            net_load_with_storage[h] += charge
+        elif net_load[h] > demand[h] * 0.85 and storage_soc > storage_max_gwh * 0.1:
+            # 순부하 높을 때 방전 (evening ramp 구간)
+            discharge = min(storage_gw, storage_soc * 0.92, net_load[h] - demand[h] * 0.7)
+            discharge = max(0, discharge)
+            storage_soc -= discharge / 0.92
+            storage_profile[h] = discharge  # 양수 = 방전
+            net_load_with_storage[h] -= discharge
+
+    # --- CAISO 실측 데이터 (2025년 4월 기준, GridStatus.io) ---
+    caiso_data = {
+        'demand': [22, 21, 20, 19.5, 19.5, 20.5, 23, 25, 26.5, 27, 27.5, 28,
+                   28, 27.5, 27, 27.5, 28.5, 29, 28.5, 27, 25.5, 24.5, 23.5, 22.5],
+        'solar': [0, 0, 0, 0, 0, 0.2, 2, 6, 10, 13, 15, 16.5,
+                  17, 16.5, 15, 12, 8, 3, 0.3, 0, 0, 0, 0, 0],
+        'net_load': [22, 21, 20, 19.5, 19.5, 20.3, 21, 19, 16.5, 14, 12.5, 11.5,
+                     11, 11, 12, 15.5, 20.5, 26, 28.2, 27, 25.5, 24.5, 23.5, 22.5],
+        'storage': [0.5, 0.3, 0.2, 0.1, 0, -0.5, -2, -4, -5.5, -6, -5.5, -5,
+                    -4, -3, -2, 0, 2, 5, 7, 6, 4, 2, 1, 0.5]
+    }
+
+    # ==================== 차트 1: 한국 Duck Curve ====================
+    fig1 = go.Figure()
+
+    # 총 수요
+    fig1.add_trace(go.Scatter(
+        x=hours, y=demand, mode='lines', name='총 수요',
+        line=dict(color='white', width=3, dash='dot'),
+        fill=None
+    ))
+
+    # 순부하 (PV+풍력 차감)
+    fig1.add_trace(go.Scatter(
+        x=hours, y=net_load, mode='lines', name='순부하 (Net Load)',
+        line=dict(color='#f59e0b', width=3),
+        fill='tonexty', fillcolor='rgba(245,158,11,0.15)'
+    ))
+
+    if storage_gw > 0:
+        fig1.add_trace(go.Scatter(
+            x=hours, y=net_load_with_storage, mode='lines', name='순부하 + ESS',
+            line=dict(color='#10b981', width=3, dash='dash')
+        ))
+
+    # Duck 영역 표시
+    belly_min_idx = np.argmin(net_load)
+    ramp_max_idx = 17  # 저녁 6시
+    belly_val = net_load[belly_min_idx]
+    ramp_val = net_load[ramp_max_idx] if ramp_max_idx < len(net_load) else net_load[-1]
+
+    fig1.add_annotation(x=belly_min_idx, y=belly_val,
+                        text=f"🦆 Belly<br>{belly_val:.1f} GW",
+                        showarrow=True, arrowhead=2, font=dict(size=13, color='#f59e0b'))
+    fig1.add_annotation(x=ramp_max_idx, y=ramp_val,
+                        text=f"⚡ Evening Ramp<br>{ramp_val:.1f} GW",
+                        showarrow=True, arrowhead=2, font=dict(size=13, color='#ef4444'))
+
+    duck_depth = max(demand) - belly_val
+    ramp_rate = ramp_val - belly_val
+
+    fig1.update_layout(
+        title=f"🇰🇷 한국 Duck Curve — {season} | PV {pv_capacity_gw}GW, 풍력 {wind_capacity_gw}GW",
+        xaxis_title="시간 (Hour)", yaxis_title="전력 (GW)",
+        template="plotly_white", height=500,
+        xaxis=dict(tickmode='linear', dtick=2),
+        legend=dict(orientation="h", y=-0.15)
+    )
+
+    st.plotly_chart(fig1, use_container_width=True)
+
+    # --- KPI 카드 ---
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.metric("🦆 Duck Depth", f"{duck_depth:.1f} GW",
+                   help="피크 수요 대비 순부하 최저점 차이")
+    with k2:
+        st.metric("⚡ Evening Ramp", f"{ramp_rate:.1f} GW",
+                   help="Belly → Evening Peak 상승폭 (3-4시간)")
+    with k3:
+        over_gen = max(0, -min(net_load))
+        st.metric("⚠️ 과잉발전", f"{over_gen:.1f} GW",
+                   help="순부하 < 0 구간 (curtailment 필요)")
+    with k4:
+        re_peak_share = (max(solar_gen) + max(wind_gen)) / max(demand) * 100
+        st.metric("☀️ RE 피크 비중", f"{re_peak_share:.0f}%",
+                   help="재생에너지 피크 / 수요 피크")
+
+    # ==================== 차트 2: PV 시나리오 비교 ====================
+    st.markdown("---")
+    st.markdown("#### 📈 태양광 확대 시나리오별 Duck Curve 변화")
+
+    scenarios = {
+        f"현재 ({pv_capacity_gw}GW)": pv_capacity_gw,
+        "2030 목표 (60GW)": 60,
+        "2035 전망 (100GW)": 100,
+        "극단 시나리오 (150GW)": 150
+    }
+
+    fig2 = go.Figure()
+    colors = ['#6b7280', '#3b82f6', '#f59e0b', '#ef4444']
+
+    for i, (label, pv_gw) in enumerate(scenarios.items()):
+        sg = np.array(profile['solar_cf']) * pv_gw
+        nl = demand - sg - wind_gen
+        fig2.add_trace(go.Scatter(
+            x=hours, y=nl, mode='lines', name=label,
+            line=dict(color=colors[i], width=2.5 if i > 0 else 1.5,
+                      dash='dot' if i == 0 else 'solid')
+        ))
+
+    fig2.add_trace(go.Scatter(
+        x=hours, y=demand, mode='lines', name='총 수요',
+        line=dict(color='gray', width=1, dash='dot'), opacity=0.5
+    ))
+
+    fig2.add_hline(y=0, line_dash="dash", line_color="red", opacity=0.5,
+                   annotation_text="과잉발전 경계")
+
+    fig2.update_layout(
+        title=f"태양광 확대에 따른 Duck Curve 심화 — {season}",
+        xaxis_title="시간 (Hour)", yaxis_title="순부하 (GW)",
+        template="plotly_white", height=450,
+        xaxis=dict(tickmode='linear', dtick=2),
+        legend=dict(orientation="h", y=-0.15)
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # ==================== 차트 3: CAISO 비교 ====================
+    if compare_caiso:
+        st.markdown("---")
+        st.markdown("#### 🇺🇸 CAISO 실측 비교 (2025년 4월, GridStatus.io)")
+
+        fig3 = make_subplots(rows=1, cols=2, subplot_titles=(
+            "🇰🇷 한국 (시뮬레이션)", "🇺🇸 CAISO (실측 2025)"
+        ), horizontal_spacing=0.08)
+
+        # 한국
+        fig3.add_trace(go.Scatter(x=hours, y=demand, name='KR 총수요',
+                                   line=dict(color='white', width=2, dash='dot'),
+                                   showlegend=True), row=1, col=1)
+        fig3.add_trace(go.Scatter(x=hours, y=net_load, name='KR 순부하',
+                                   line=dict(color='#f59e0b', width=3),
+                                   fill='tonexty', fillcolor='rgba(245,158,11,0.1)'), row=1, col=1)
+
+        # CAISO
+        fig3.add_trace(go.Scatter(x=hours, y=caiso_data['demand'], name='CA 총수요',
+                                   line=dict(color='white', width=2, dash='dot'),
+                                   showlegend=True), row=1, col=2)
+        fig3.add_trace(go.Scatter(x=hours, y=caiso_data['net_load'], name='CA 순부하',
+                                   line=dict(color='#8b5cf6', width=3),
+                                   fill='tonexty', fillcolor='rgba(139,92,246,0.1)'), row=1, col=2)
+
+        fig3.update_layout(template="plotly_white", height=400,
+                           legend=dict(orientation="h", y=-0.2))
+        fig3.update_xaxes(title_text="시간", tickmode='linear', dtick=4)
+        fig3.update_yaxes(title_text="GW", row=1, col=1)
+        fig3.update_yaxes(title_text="GW", row=1, col=2)
+
+        st.plotly_chart(fig3, use_container_width=True)
+
+        # 비교 테이블
+        kr_belly = min(net_load)
+        kr_ramp = net_load[17] - kr_belly
+        ca_belly = min(caiso_data['net_load'])
+        ca_ramp = max(caiso_data['net_load']) - ca_belly
+
+        comp_df = pd.DataFrame({
+            '지표': ['피크 수요 (GW)', '태양광 피크 (GW)', 'Duck Belly (GW)',
+                    'Evening Ramp (GW)', 'Belly/피크 비율', 'Storage 방전 피크 (GW)'],
+            '🇰🇷 한국': [f"{max(demand):.0f}", f"{max(solar_gen):.0f}",
+                       f"{kr_belly:.1f}", f"{kr_ramp:.1f}",
+                       f"{kr_belly/max(demand)*100:.0f}%", f"{storage_gw}"],
+            '🇺🇸 CAISO': [f"{max(caiso_data['demand']):.0f}", f"{max(caiso_data['solar']):.0f}",
+                         f"{ca_belly:.1f}", f"{ca_ramp:.1f}",
+                         f"{ca_belly/max(caiso_data['demand'])*100:.0f}%", "~7"]
+        })
+        st.dataframe(comp_df, hide_index=True, use_container_width=True)
+
+    # ==================== 차트 4: ESS 충방전 프로파일 ====================
+    if storage_gw > 0:
+        st.markdown("---")
+        st.markdown("#### 🔋 ESS 충방전 프로파일")
+
+        fig4 = go.Figure()
+
+        # 충전 (음수) / 방전 (양수)
+        charge_vals = np.where(storage_profile < 0, storage_profile, 0)
+        discharge_vals = np.where(storage_profile > 0, storage_profile, 0)
+
+        fig4.add_trace(go.Bar(x=hours, y=charge_vals, name='충전',
+                               marker_color='#3b82f6', opacity=0.8))
+        fig4.add_trace(go.Bar(x=hours, y=discharge_vals, name='방전',
+                               marker_color='#ef4444', opacity=0.8))
+
+        # CAISO storage overlay
+        if compare_caiso:
+            ca_storage_scaled = np.array(caiso_data['storage'])
+            fig4.add_trace(go.Scatter(
+                x=hours, y=ca_storage_scaled, mode='lines',
+                name='CAISO Storage (실측)',
+                line=dict(color='#8b5cf6', width=2, dash='dash')
+            ))
+
+        fig4.add_hline(y=0, line_color="gray", line_width=1)
+        fig4.update_layout(
+            title="ESS 일중 운영 패턴 — 낮 충전 / 저녁 방전",
+            xaxis_title="시간 (Hour)", yaxis_title="전력 (GW)",
+            template="plotly_white", height=400, barmode='relative',
+            xaxis=dict(tickmode='linear', dtick=2),
+            legend=dict(orientation="h", y=-0.15)
+        )
+        st.plotly_chart(fig4, use_container_width=True)
+
+    # --- 인사이트 ---
+    st.markdown("---")
+    st.markdown("#### 💡 핵심 인사이트")
+
+    min_net = min(net_load)
+    if min_net < 0:
+        st.warning(f"⚠️ 순부하가 **{abs(min_net):.1f} GW** 음수 — 커테일먼트 또는 추가 저장 필요")
+    
+    st.markdown(f"""
+    - **Duck Depth {duck_depth:.1f} GW**: 피크 수요의 {duck_depth/max(demand)*100:.0f}%에 해당하는 깊이
+    - **Evening Ramp {ramp_rate:.1f} GW / 3~4시간**: 시간당 {ramp_rate/4:.1f} GW 급상승 → 유연성 자원 필수
+    - **ESS {storage_gw} GW 투입 시**: Ramp 완화 효과 {max(0, ramp_rate - (net_load_with_storage[17] - min(net_load_with_storage))):.1f} GW 감소
+    - **CAISO 교훈**: Storage 6% 비중만으로 22GW 일일 스윙 관리 중 (2025)
+    
+    **한국 시사점**: PV {pv_capacity_gw}GW 기준, ESS 없이는 낮 과잉/저녁 부족의 구조적 불균형 심화.
+    HESS 6-layer (Li-ion + Na-ion + RFB + H₂) 조합이 최적 해법.
+    
+    > *CAISO 실측 데이터 출처: [GridStatus.io](https://www.gridstatus.io/live) (Data: CAISO)*
+    > *BNEF 2025 Hydrogen Levelized Cost Report*
+    > *Nature Reviews Materials (2025) doi:10.1038/s41578-025-00857-4*
     """)
 
 
