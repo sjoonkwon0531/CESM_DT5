@@ -9,6 +9,39 @@ from typing import Dict, List, Optional, Tuple
 import math
 from dataclasses import dataclass
 
+# ─────────────────────────────────────────────────────────────────
+# BNEF 2025 Green H₂ LCOH 벤치마크 ($/kg)
+# ─────────────────────────────────────────────────────────────────
+BNEF_LCOH_2025 = {
+    "China": 3.2,
+    "Saudi_Arabia": 3.9,
+    "India": 5.0,
+    "Spain": 5.9,
+    "Texas_US": 6.5,
+    "Germany": 8.0,
+    "Japan": 10.2,
+    "Korea": 8.5,
+}
+
+
+def get_lcoh_by_country(country: str) -> float:
+    """국가별 LCOH 반환 ($/kg)"""
+    if country not in BNEF_LCOH_2025:
+        raise ValueError(f"Unknown country: {country}. "
+                         f"Available: {list(BNEF_LCOH_2025.keys())}")
+    return BNEF_LCOH_2025[country]
+
+
+def compare_lcoh_all() -> Dict:
+    """전체 국가 LCOH 비교 데이터 반환"""
+    return {
+        "countries": list(BNEF_LCOH_2025.keys()),
+        "lcoh_usd_per_kg": list(BNEF_LCOH_2025.values()),
+        "source": "BloombergNEF 2025 Hydrogen Levelized Cost Report",
+        "unit": "$/kg H₂",
+    }
+
+
 @dataclass
 class H2ComponentConfig:
     """H₂ 시스템 구성요소 설정"""

@@ -22,6 +22,58 @@ def _nan_guard(v, default=0.0):
     return v
 
 
+# ─────────────────────────────────────────────────────────────────
+# 한국 CSP 투자 필요액 벤치마크
+# ─────────────────────────────────────────────────────────────────
+_US_CSP_BENCHMARKS = {
+    "Google": {"investment_b": 5.0, "capacity_gw": 2.0, "cost_per_gw_b": 2.5},
+    "Amazon": {"investment_b": 7.0, "capacity_gw": 3.0, "cost_per_gw_b": 2.33},
+    "Meta": {"investment_b": 4.0, "capacity_gw": 1.5, "cost_per_gw_b": 2.67},
+    "Microsoft": {"investment_b": 6.0, "capacity_gw": 2.5, "cost_per_gw_b": 2.40},
+}
+
+# 한국 비용 조정 계수 (토지·인건비·규제 등)
+_KOREA_COST_MULTIPLIER = 1.15
+
+
+def estimate_korea_csp_investment(csp_name: str, dc_capacity_mw: float) -> Dict:
+    """
+    한국 CSP 투자 필요액 추정 (미국 벤치마크 기반)
+
+    Args:
+        csp_name: 벤치마크 CSP 이름 (Google/Amazon/Meta/Microsoft)
+        dc_capacity_mw: 데이터센터 용량 (MW)
+
+    Returns:
+        투자 필요액 분석
+    """
+    if csp_name not in _US_CSP_BENCHMARKS:
+        # 평균 벤치마크 사용
+        avg_cost = np.mean([v["cost_per_gw_b"] for v in _US_CSP_BENCHMARKS.values()])
+        benchmark = {"cost_per_gw_b": avg_cost, "investment_b": 0, "capacity_gw": 0}
+        benchmark_name = "평균"
+    else:
+        benchmark = _US_CSP_BENCHMARKS[csp_name]
+        benchmark_name = csp_name
+
+    dc_capacity_gw = dc_capacity_mw / 1000.0
+    us_cost_b = dc_capacity_gw * benchmark["cost_per_gw_b"]
+    kr_cost_b = us_cost_b * _KOREA_COST_MULTIPLIER
+    kr_cost_trillion_krw = kr_cost_b * 1.35  # USD → KRW (조원, $1B ≈ 1.35조원)
+
+    return {
+        "benchmark_csp": benchmark_name,
+        "benchmark_cost_per_gw_b": round(benchmark["cost_per_gw_b"], 2),
+        "dc_capacity_mw": dc_capacity_mw,
+        "dc_capacity_gw": round(dc_capacity_gw, 3),
+        "estimated_us_cost_billion_usd": round(_nan_guard(us_cost_b), 2),
+        "korea_multiplier": _KOREA_COST_MULTIPLIER,
+        "estimated_kr_cost_billion_usd": round(_nan_guard(kr_cost_b), 2),
+        "estimated_kr_cost_trillion_krw": round(_nan_guard(kr_cost_trillion_krw), 2),
+        "note": f"{benchmark_name} 벤치마크 기반, 한국 비용 조정 ×{_KOREA_COST_MULTIPLIER}",
+    }
+
+
 class InvestmentDashboard:
     """투자 의사결정 분석 모듈"""
 

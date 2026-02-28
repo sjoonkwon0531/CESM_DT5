@@ -1533,6 +1533,26 @@ def display_h2_results(data):
     except:
         st.info("Round-trip 효율 계산을 위한 데이터가 부족합니다.")
     
+    # BNEF LCOH 국가별 비교
+    st.subheader("🌍 국가별 Green H₂ LCOH 비교 (BNEF 2025)")
+    from modules.m05_h2 import BNEF_LCOH_2025, compare_lcoh_all
+    lcoh_data = compare_lcoh_all()
+    fig_lcoh = go.Figure(go.Bar(
+        x=lcoh_data["countries"],
+        y=lcoh_data["lcoh_usd_per_kg"],
+        marker_color=["#ef4444" if c == "Korea" else "#3b82f6"
+                      for c in lcoh_data["countries"]],
+        text=[f"${v:.1f}" for v in lcoh_data["lcoh_usd_per_kg"]],
+        textposition="outside"
+    ))
+    fig_lcoh.update_layout(
+        title="Green H₂ LCOH ($/kg) — BNEF 2025",
+        xaxis_title="국가", yaxis_title="LCOH ($/kg)",
+        height=400, template='plotly_white'
+    )
+    st.plotly_chart(fig_lcoh, use_container_width=True)
+    st.caption(f"출처: {lcoh_data['source']}")
+
     # H₂ 운전 이력
     if 'h2' in data and not data['h2'].empty:
         h2_data = data['h2']
@@ -2037,6 +2057,24 @@ def display_policy_simulator():
     st.progress(min(re100["achievement_pct"] / 100, 1.0))
     st.write(f"달성률: **{re100['achievement_pct']}%** | 부족: {re100['gap_mwh']:,.0f} MWh")
 
+    # Ratepayer Protection
+    st.markdown("### ⚖️ Ratepayer Protection Pledge")
+    rp_enabled = st.toggle("Ratepayer Protection 시나리오 적용", value=False, key="rp_toggle")
+    if rp_enabled:
+        rp_result = sim.simulate_policy_impact(
+            scenario_key="ratepayer_protection",
+            base_lcoe_krw=80.0,
+            dc_capacity_mw=100.0
+        )
+        col_rp1, col_rp2, col_rp3 = st.columns(3)
+        with col_rp1:
+            st.metric("자체 발전 요구량", f"{rp_result['self_generation_mw']:.0f} MW")
+        with col_rp2:
+            st.metric("조정 LCOE", f"{rp_result['adjusted_lcoe_krw_per_kwh']:.1f} ₩/kWh")
+        with col_rp3:
+            st.metric("소비자 요금 영향", f"{rp_result['grid_price_impact_pct']:.1f}%")
+        st.info(f"📋 {rp_result['policy_context']}: {rp_result['consumer_protection']}")
+
     # 정책 조합 히트맵
     st.markdown("### 정책 조합 IRR 히트맵")
     hm = sim.policy_heatmap_data()
@@ -2064,11 +2102,71 @@ def display_policy_simulator():
 def display_industry_model():
     """산업 상용화 탭"""
     st.subheader("🏭 산업 상용화 모델")
-    st.markdown("CSP별 맞춤 분석 + BYOG + 스케일링")
+    st.markdown("CSP별 맞춤 분석 + BYOG + 스케일링 + 글로벌 하이퍼스케일러 전략")
 
     model = IndustryModel()
 
-    from modules.m12_industry import CSP_PROFILES
+    from modules.m12_industry import CSP_PROFILES, CSP_ENERGY_STRATEGIES, get_csp_strategy, compare_csp_strategies
+
+    # ── 하이퍼스케일러 에너지 전략 섹션 ──
+    st.markdown("### ⚡ 글로벌 하이퍼스케일러 에너지 전략")
+
+    strategy_csp = st.selectbox(
+        "CSP 에너지 전략 선택",
+        list(CSP_ENERGY_STRATEGIES.keys()),
+        format_func=lambda x: f"{x} — {CSP_ENERGY_STRATEGIES[x]['name']}",
+        key="strategy_csp_select"
+    )
+
+    strategy = get_csp_strategy(strategy_csp)
+
+    col_s1, col_s2 = st.columns([1, 2])
+    with col_s1:
+        st.write(f"**전략**: {strategy['name']}")
+        st.write(f"**설명**: {strategy['description']}")
+        st.write(f"**유형**: `{strategy.get('strategy', 'N/A')}`")
+        st.write(f"**예시**: {strategy.get('example', '')}")
+    with col_s2:
+        # 에너지 믹스 파이차트
+        mix = strategy["energy_mix"]
+        fig_mix = px.pie(
+            values=list(mix.values()),
+            names=list(mix.keys()),
+            title=f"{strategy_csp} 에너지 믹스",
+            color_discrete_sequence=px.colors.qualitative.Set2,
+        )
+        fig_mix.update_layout(height=300, template='plotly_white')
+        st.plotly_chart(fig_mix, use_container_width=True)
+
+    # 전략 비교 테이블
+    st.markdown("### 📊 전략 비교 (LCOE / 탄소 / 그리드 의존도)")
+    comparison = compare_csp_strategies()
+    comp_df = pd.DataFrame(comparison)
+    st.dataframe(
+        comp_df[["csp", "strategy_name", "lcoe_krw_per_kwh",
+                 "carbon_tco2_per_mwh", "grid_dependency_pct", "example"]],
+        hide_index=True, use_container_width=True
+    )
+
+    # 비교 바차트
+    fig_comp = go.Figure()
+    csp_labels = [c["csp"] for c in comparison]
+    fig_comp.add_trace(go.Bar(name="LCOE (₩/kWh)", x=csp_labels,
+                              y=[c["lcoe_krw_per_kwh"] for c in comparison]))
+    fig_comp.add_trace(go.Bar(name="탄소 (tCO₂/MWh ×100)", x=csp_labels,
+                              y=[c["carbon_tco2_per_mwh"] * 100 for c in comparison]))
+    fig_comp.add_trace(go.Bar(name="그리드 의존도 (%)", x=csp_labels,
+                              y=[c["grid_dependency_pct"] for c in comparison]))
+    fig_comp.update_layout(barmode="group", height=400,
+                           title="CSP별 LCOE / 탄소 / 그리드 의존도 비교",
+                           template='plotly_white')
+    st.plotly_chart(fig_comp, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── 기존 CSP 프로필 분석 ──
+    st.markdown("### 🏭 한국 CSP 프로필 분석")
+
     csp_keys = list(CSP_PROFILES.keys())
     csp_names = [CSP_PROFILES[k]["name"] for k in csp_keys]
 

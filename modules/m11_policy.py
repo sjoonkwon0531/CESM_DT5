@@ -49,6 +49,15 @@ POLICY_SCENARIOS = {
         "interim_2030_pct": 60,
         "interim_2040_pct": 90,
     },
+    "ratepayer_protection": {
+        "name": "Ratepayer Protection Pledge",
+        "description": "AIDC 자체 전력 확보 → 일반 소비자 요금 전가 방지",
+        "grid_cost_pass_through": 0.0,
+        "self_generation_requirement": 0.80,
+        "policy_context": "2026 White House Hyperscaler Pledge",
+        "impact_on_lcoe": 1.10,
+        "impact_on_grid_price": -0.05,
+    },
     "power_plan": {
         "renewable_30": 0.30,
         "renewable_40": 0.40,
@@ -324,6 +333,59 @@ class PolicySimulator:
             "irr_pct": round(_nan_guard(irr * 100), 2) if irr is not None else None,
             "npv_billion_krw": round(_nan_guard(npv), 2),
             "base_irr_pct": round(_nan_guard(base["irr_pct"]), 2),
+        }
+
+    def simulate_policy_impact(self,
+                              scenario_key: str = "ratepayer_protection",
+                              base_lcoe_krw: float = 80.0,
+                              dc_capacity_mw: float = 100.0) -> Dict:
+        """
+        정책 시나리오의 경제성 영향 시뮬레이션
+
+        Args:
+            scenario_key: 정책 시나리오 키
+            base_lcoe_krw: 기준 LCOE (₩/kWh)
+            dc_capacity_mw: 데이터센터 용량 (MW)
+
+        Returns:
+            정책 영향 분석 결과
+        """
+        if scenario_key not in POLICY_SCENARIOS:
+            raise ValueError(f"Unknown scenario: {scenario_key}")
+
+        scenario = POLICY_SCENARIOS[scenario_key]
+
+        if scenario_key == "ratepayer_protection":
+            self_gen_req = scenario["self_generation_requirement"]
+            lcoe_mult = scenario["impact_on_lcoe"]
+            grid_price_impact = scenario["impact_on_grid_price"]
+
+            self_gen_mw = dc_capacity_mw * self_gen_req
+            grid_mw = dc_capacity_mw * (1 - self_gen_req)
+
+            adjusted_lcoe = base_lcoe_krw * lcoe_mult
+            annual_hours = 8760
+            self_gen_cost = self_gen_mw * annual_hours * adjusted_lcoe / 1e6  # 백만원
+            grid_cost = grid_mw * annual_hours * base_lcoe_krw * (1 + grid_price_impact) / 1e6
+
+            return {
+                "scenario": scenario["name"],
+                "description": scenario["description"],
+                "policy_context": scenario["policy_context"],
+                "self_generation_mw": round(self_gen_mw, 1),
+                "grid_mw": round(grid_mw, 1),
+                "adjusted_lcoe_krw_per_kwh": round(adjusted_lcoe, 1),
+                "annual_self_gen_cost_million_krw": round(_nan_guard(self_gen_cost), 0),
+                "annual_grid_cost_million_krw": round(_nan_guard(grid_cost), 0),
+                "total_annual_cost_million_krw": round(_nan_guard(self_gen_cost + grid_cost), 0),
+                "grid_price_impact_pct": round(grid_price_impact * 100, 1),
+                "consumer_protection": "소비자 요금 전가 0%",
+            }
+
+        # 기본 fallback
+        return {
+            "scenario": scenario_key,
+            "note": "해당 시나리오의 상세 시뮬레이션은 개별 함수 참조",
         }
 
     def policy_heatmap_data(self,

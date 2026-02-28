@@ -91,6 +91,115 @@ BASE_CAPEX_100MW = {
 }
 
 
+# ─────────────────────────────────────────────────────────────────
+# 글로벌 하이퍼스케일러 에너지 전략 프리셋
+# ─────────────────────────────────────────────────────────────────
+CSP_ENERGY_STRATEGIES = {
+    "Google": {
+        "name": "Co-located Renewables",
+        "description": "현장 재생에너지 설비 공동 배치, 장기 PPA",
+        "energy_mix": {"solar": 0.50, "wind": 0.30, "grid": 0.20},
+        "ppa_years": 20,
+        "strategy": "BYPASS_QUEUE",
+        "capex_premium": 1.15,
+        "example": "AES deal, Wilbarger Co. TX, Solar+Wind on-site"
+    },
+    "Amazon": {
+        "name": "Dedicated Gas Generation",
+        "description": "전용 가스 발전 설비 + 저장",
+        "energy_mix": {"natural_gas": 0.65, "battery_storage": 0.15, "grid": 0.20},
+        "gas_capacity_gw": 2.6,
+        "storage_mw": 400,
+        "investment_b": 7.0,
+        "strategy": "DEDICATED_GEN",
+        "example": "NIPSCO GenCo, Indiana"
+    },
+    "Meta": {
+        "name": "Behind-the-Meter Gas",
+        "description": "미터기 뒤편 직접 가스 발전, 다중 사이트",
+        "energy_mix": {"natural_gas": 0.70, "grid": 0.30},
+        "sites": ["Louisiana 2.25GW", "El Paso $473M", "Ohio 400MW"],
+        "strategy": "MULTI_SITE",
+        "example": "366MW modular gas turbines for 1GW DC"
+    },
+    "Microsoft": {
+        "name": "Grid Partnership",
+        "description": "그리드 인프라 직접 투자, 송전망 증설 비용 부담",
+        "energy_mix": {"grid": 0.60, "wind": 0.25, "solar": 0.15},
+        "contracted_gw": 7.9,
+        "grid_org": "MISO",
+        "strategy": "PAY_AND_BUILD",
+        "example": "Black Hills Energy, Wyoming"
+    },
+    # 한국 CSP 프리셋
+    "Samsung_SDS": {
+        "name": "한국형 그리드 의존",
+        "description": "한전 전력 + 자체 태양광 일부",
+        "energy_mix": {"grid": 0.85, "solar": 0.10, "ess": 0.05},
+        "strategy": "GRID_DEPENDENT",
+        "example": "수원/화성 데이터센터"
+    },
+    "Naver": {
+        "name": "친환경 DC (세종)",
+        "description": "PPA + 연료전지 하이브리드",
+        "energy_mix": {"grid": 0.60, "fuel_cell": 0.25, "solar": 0.15},
+        "strategy": "HYBRID",
+        "example": "세종 각 데이터센터"
+    }
+}
+
+# 에너지원별 탄소 배출계수 (tCO₂/MWh)
+_EMISSION_FACTORS = {
+    "solar": 0.0, "wind": 0.0, "battery_storage": 0.0, "ess": 0.0,
+    "grid": 0.4594, "natural_gas": 0.37, "fuel_cell": 0.0,
+}
+
+# 에너지원별 LCOE 추정 (₩/kWh)
+_LCOE_FACTORS = {
+    "solar": 60, "wind": 70, "battery_storage": 120, "ess": 120,
+    "grid": 80, "natural_gas": 90, "fuel_cell": 150,
+}
+
+
+def get_csp_strategy(csp_name: str) -> Dict:
+    """CSP 이름으로 에너지 전략 프리셋 반환"""
+    if csp_name not in CSP_ENERGY_STRATEGIES:
+        raise ValueError(f"Unknown CSP: {csp_name}. "
+                         f"Available: {list(CSP_ENERGY_STRATEGIES.keys())}")
+    return CSP_ENERGY_STRATEGIES[csp_name]
+
+
+def compare_csp_strategies() -> List[Dict]:
+    """전체 CSP 전략 비교 (LCOE, 탄소, 그리드 의존도)"""
+    results = []
+    for csp_name, strategy in CSP_ENERGY_STRATEGIES.items():
+        mix = strategy["energy_mix"]
+
+        # 가중평균 LCOE
+        lcoe = sum(mix.get(src, 0) * _LCOE_FACTORS.get(src, 80)
+                   for src in mix)
+
+        # 가중평균 탄소 배출 (tCO₂/MWh)
+        carbon = sum(mix.get(src, 0) * _EMISSION_FACTORS.get(src, 0.4)
+                     for src in mix)
+
+        # 그리드 의존도
+        grid_dep = mix.get("grid", 0)
+
+        results.append({
+            "csp": csp_name,
+            "strategy_name": strategy["name"],
+            "description": strategy["description"],
+            "energy_mix": mix,
+            "lcoe_krw_per_kwh": round(lcoe, 1),
+            "carbon_tco2_per_mwh": round(carbon, 4),
+            "grid_dependency_pct": round(grid_dep * 100, 1),
+            "strategy_type": strategy.get("strategy", "N/A"),
+            "example": strategy.get("example", ""),
+        })
+    return results
+
+
 class IndustryModel:
     """산업 상용화 분석 모델"""
 
