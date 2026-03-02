@@ -12,6 +12,88 @@ from dataclasses import dataclass
 # ─────────────────────────────────────────────────────────────────
 # BNEF 2025 Green H₂ LCOH 벤치마크 ($/kg)
 # ─────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Solar Battery H₂ Production (2030+ Emerging Technology)
+# Ref: Nature Communications (Ulm/Jena, DOI:10.1038/s41467-026-68342-2)
+# Water-soluble polymer: sunlight capture → days storage → on-demand H₂
+# ─────────────────────────────────────────────────────────────────
+
+def solar_battery_h2_production(
+    solar_irradiance_kwh_per_m2: float,
+    area_m2: float,
+    eta_capture: float = 0.80,
+    eta_h2: float = 0.72,
+    storage_days: float = 3.0,
+    degradation_rate_per_year: float = 0.02,
+    operating_years: float = 0.0,
+) -> Dict:
+    """
+    Solar Battery 경로를 통한 H₂ 생산량 계산.
+
+    Water-soluble polymer가 태양광을 흡수하여 화학 에너지로 저장한 뒤
+    on-demand로 H₂를 방출하는 신기술 (TRL 2-3, 2030+ emerging).
+
+    Args:
+        solar_irradiance_kwh_per_m2: 일사량 (kWh/m²) — 해당 기간 합산값
+        area_m2: 집광 면적 (m²)
+        eta_capture: 광 포집 효율 (기본 0.80)
+        eta_h2: H₂ 방출 효율 (기본 0.72)
+        storage_days: 에너지 저장 일수 (기본 3일)
+        degradation_rate_per_year: 연간 성능 열화율 (기본 2 %/yr)
+        operating_years: 누적 운전 년수
+
+    Returns:
+        Dict with h2_production_kg, sth_efficiency, stored_energy_kwh 등
+    """
+    if solar_irradiance_kwh_per_m2 < 0:
+        raise ValueError("solar_irradiance_kwh_per_m2 must be >= 0")
+    if area_m2 < 0:
+        raise ValueError("area_m2 must be >= 0")
+    if not (0 <= eta_capture <= 1):
+        raise ValueError("eta_capture must be in [0, 1]")
+    if not (0 <= eta_h2 <= 1):
+        raise ValueError("eta_h2 must be in [0, 1]")
+
+    # 열화 반영
+    degradation_factor = max(0.0, 1.0 - degradation_rate_per_year * operating_years)
+
+    # 총 입사 에너지
+    total_solar_energy_kwh = solar_irradiance_kwh_per_m2 * area_m2
+
+    # 포집된 화학 에너지
+    captured_energy_kwh = total_solar_energy_kwh * eta_capture * degradation_factor
+
+    # 저장 손실 (장기 저장 시 소량 손실 모델링: 0.5 %/day)
+    storage_loss_factor = max(0.0, 1.0 - 0.005 * storage_days)
+    stored_energy_kwh = captured_energy_kwh * storage_loss_factor
+
+    # H₂ 생산
+    h2_energy_kwh = stored_energy_kwh * eta_h2
+    h2_hhv_kwh_per_kg = 39.39  # Higher Heating Value
+    h2_production_kg = h2_energy_kwh / h2_hhv_kwh_per_kg
+
+    # Solar-to-Hydrogen 효율
+    sth_efficiency = (eta_capture * eta_h2 * degradation_factor * storage_loss_factor
+                      if total_solar_energy_kwh > 0 else 0.0)
+
+    return {
+        "method": "solar_battery",
+        "h2_production_kg": h2_production_kg,
+        "h2_energy_kwh": h2_energy_kwh,
+        "sth_efficiency": sth_efficiency,
+        "total_solar_energy_kwh": total_solar_energy_kwh,
+        "captured_energy_kwh": captured_energy_kwh,
+        "stored_energy_kwh": stored_energy_kwh,
+        "storage_days": storage_days,
+        "storage_loss_factor": storage_loss_factor,
+        "degradation_factor": degradation_factor,
+        "eta_capture": eta_capture,
+        "eta_h2": eta_h2,
+        "trl": "2-3",
+        "technology_readiness": "2030+ Emerging Technology",
+    }
+
+
 BNEF_LCOH_2025 = {
     "China": 3.2,
     "Saudi_Arabia": 3.9,
@@ -116,6 +198,10 @@ class SOECElectrolyzer:
         thermal_factor = min(1.15, thermal_factor)  # 최대 15% 향상
         
         electrical_eff = faraday_eff * voltage_eff * thermal_factor * self.degradation_factor
+        
+        # 공칭 효율 상한 적용 (config 기반, PEM 기준 65%)
+        # 물리 모델 계산값이 공칭 효율을 초과하지 않도록 제한
+        electrical_eff = min(electrical_eff, self.config.efficiency_nominal)
         
         # 폐열 효율 (CHP 모드)
         waste_heat_ratio = (1 - electrical_eff) * 0.8  # 80%의 폐열 회수 가능
@@ -270,7 +356,10 @@ class SOFCFuelCell:
         # 전기 효율
         electrical_eff = voltage_eff * fuel_utilization * self.degradation_factor
         
-        # 고온 운전 장점 (열회수)
+        # 공칭 효율 상한 적용 (config 기반, PEM FC 기준 55%)
+        electrical_eff = min(electrical_eff, self.config.efficiency_nominal)
+        
+        # 폐열 회수 효율
         thermal_eff = (1 - electrical_eff) * 0.85  # 85% 폐열 회수
         
         return electrical_eff, thermal_eff
@@ -452,31 +541,32 @@ class H2SystemModule:
             storage_capacity_kg: H₂ 저장 용량 (kg)
             storage_type: 저장 방식 ("compressed" or "metal_hydride")
         """
-        # SOEC 초기화
+        # SOEC(전해조) 초기화 — PEM 기준
+        # RT efficiency 설계: η_elec(65%) × η_FC(55%) ≈ 35.75% → config 37.5%
         soec_config = H2ComponentConfig(
-            name="SOEC",
+            name="PEM Electrolyzer",
             rated_power_kw=soec_power_kw,
-            efficiency_nominal=0.85,
-            operating_temp_celsius=800,
-            startup_time_min=120,  # 2시간 예열
+            efficiency_nominal=0.65,      # PEM 전해조 65% (LHV, IRENA 2024)
+            operating_temp_celsius=80,     # PEM 운전온도
+            startup_time_min=15,           # PEM 저온 빠른 시동
             min_load_ratio=0.1,
             max_load_ratio=1.0,
-            degradation_rate_per_1000h=0.5,  # 0.5%/1000h
-            thermal_mass_kwh_per_k=50  # 큰 열질량
+            degradation_rate_per_1000h=0.5,
+            thermal_mass_kwh_per_k=5       # PEM은 열질량 작음
         )
         self.soec = SOECElectrolyzer(soec_config)
         
-        # SOFC 초기화
+        # SOFC(연료전지) 초기화 — PEM FC 기준
         sofc_config = H2ComponentConfig(
-            name="SOFC",
+            name="PEM Fuel Cell",
             rated_power_kw=sofc_power_kw,
-            efficiency_nominal=0.60,
-            operating_temp_celsius=800,
-            startup_time_min=60,  # 1시간 예열
+            efficiency_nominal=0.55,      # PEM FC 55% (LHV, DOE 2024)
+            operating_temp_celsius=80,     # PEM 운전온도
+            startup_time_min=5,            # PEM FC 빠른 시동
             min_load_ratio=0.1,
             max_load_ratio=1.0,
-            degradation_rate_per_1000h=0.3,  # 0.3%/1000h
-            thermal_mass_kwh_per_k=30
+            degradation_rate_per_1000h=0.3,
+            thermal_mass_kwh_per_k=3
         )
         self.sofc = SOFCFuelCell(sofc_config)
         
@@ -608,10 +698,13 @@ class H2SystemModule:
         if self.total_electrical_energy_in_kwh == 0 or self.total_electrical_energy_out_kwh == 0:
             return {"error": "No complete round trip data"}
         
-        # 순전기 효율 (IEA 2023 기준: 35-40%)
+        # 순전기 RT 효율
+        # 설계 기준: PEM 전해조(65%) × PEM FC(55%) ≈ 35.75%
+        # config 값: 37.5% (BOP, 열관리 등 시스템 보정 포함)
+        # Ref: IEA Global Hydrogen Review 2023, IRENA 2024
         electrical_efficiency = self.total_electrical_energy_out_kwh / self.total_electrical_energy_in_kwh
         
-        # CHP 효율 (열 에너지 포함)
+        # CHP 효율 (열 에너지 포함, 목표 ~82.5%)
         total_energy_out = self.total_electrical_energy_out_kwh + self.total_thermal_energy_kwh  
         chp_efficiency = total_energy_out / self.total_electrical_energy_in_kwh
         

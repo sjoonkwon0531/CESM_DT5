@@ -106,14 +106,37 @@ class PVModule:
         return max(temp_ambient, cell_temp)  # 셀 온도는 외기온도보다 낮을 수 없음
     
     def _calculate_temperature_efficiency(self, cell_temp: float) -> float:
-        """온도 의존 효율 계산"""
-        eta_stc = self.params['eta_stc']  # % 단위
-        beta = self.params['beta']  # %/°C 단위
+        """
+        온도 의존 효율 계산 (IEC 61215 / IEC 61853 기반)
         
-        # η_PV(T) = η_STC × [1 + β(T_cell - 25)]
-        eta_temp = eta_stc * (1 + beta * (cell_temp - 25) / 100)
+        공식: η(T) = η_STC × [1 + β_rel × (T_cell − 25°C)]
         
-        return max(0, eta_temp)  # 효율은 0% 이상
+        여기서:
+          - η_STC: STC(25°C, 1000 W/m²) 기준 효율 (% 단위, 예: 24.4%)
+          - β_rel: **상대** 온도계수 (1/°C 단위)
+                   config의 beta 값은 %/°C 단위이므로 /100 변환 필요
+                   예) c-Si beta = −0.35 %/°C → β_rel = −0.0035 /°C
+                   이는 셀 온도가 1°C 상승할 때 효율이 STC 대비 0.35% **상대적** 감소를 의미
+          - T_cell: 셀 온도 (°C), _calculate_cell_temperature()에서 NOCT 모델로 산출
+        
+        Note: beta는 **상대(relative)** 온도계수임 (절대(absolute) 아님).
+              절대 온도계수 β_abs = η_STC × β_rel 이므로,
+              c-Si 예) β_abs = 24.4% × 0.0035 = 0.0854 %p/°C
+        
+        Ref: De Soto et al., Solar Energy 80(1), 2006
+             IEC 61215:2021, IEC 61853-1:2011
+        """
+        eta_stc = self.params['eta_stc']       # STC 효율 (%, 예: 24.4)
+        beta_pct_per_degC = self.params['beta'] # 상대 온도계수 (%/°C, 예: -0.35)
+        
+        # %/°C → 1/°C 변환: beta_rel = beta_pct_per_degC / 100
+        beta_rel = beta_pct_per_degC / 100.0    # 예: -0.35 → -0.0035 /°C
+        
+        delta_T = cell_temp - 25.0              # STC 기준 온도차 (°C)
+        
+        eta_temp = eta_stc * (1.0 + beta_rel * delta_T)
+        
+        return max(0.0, eta_temp)  # 효율은 0% 이상
     
     def _apply_degradation(self, efficiency: float) -> float:
         """연간 열화율 적용"""

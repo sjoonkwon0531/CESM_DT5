@@ -106,6 +106,13 @@ div[data-testid="stTabs"] > div[role="tablist"] > div {
 
 
 @st.cache_data
+def _cached_base_case():
+    """경제성 Base Case 캐시 (UP4: 계산 속도 최적화)"""
+    econ = EconomicsModule()
+    return econ.run_base_case()
+
+
+@st.cache_data
 def load_weather_data():
     """기상 데이터 로드 (캐시)"""
     weather_file = 'data/weather_sample.csv'
@@ -119,6 +126,53 @@ def load_weather_data():
         return data
 
 
+def _display_top_kpi(data):
+    """UP2: 핵심 KPI 6개 — 상단 고정 메트릭 (시연용)"""
+    pv_data = _safe_dict(data.get('pv', {}))
+    aidc_data = _safe_dict(data.get('aidc', {}))
+    ems_kpi = data.get('ems_kpi', {})
+    
+    pv_power = pv_data.get('power_mw', [])
+    aidc_power = aidc_data.get('total_power_mw', [])
+    
+    # 경제성 계산 (캐시 활용 — UP4)
+    base = _cached_base_case()
+    
+    total_pv = sum(pv_power) if pv_power else 0
+    total_aidc = sum(aidc_power) if aidc_power else 0
+    self_sufficiency = min(total_pv / total_aidc * 100, 100) if total_aidc > 0 else 0
+    
+    # PUE
+    aidc_module = data['modules'].get('aidc')
+    pue = aidc_module.pue_params['pue'] if aidc_module else 1.0
+    
+    # CO₂ 감축
+    carbon_df = data.get('carbon_df')
+    co2_avoided = 0
+    if carbon_df is not None and hasattr(carbon_df, 'sum'):
+        co2_avoided = carbon_df.get('avoided_tco2', pd.Series([0])).sum()
+    
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    with c1:
+        lcoe_val = base.get('lcoe_krw_per_mwh', 0)
+        # ₩/MWh → $/MWh (환율 1,350원)
+        lcoe_usd = lcoe_val / 1350 if lcoe_val else 0
+        st.metric("💲 LCOE", f"${lcoe_usd:.1f}/MWh")
+    with c2:
+        st.metric("📈 IRR", f"{base.get('irr_pct', 0):.1f}%")
+    with c3:
+        # 연간 환산 CO₂ (시뮬레이션 기간 비례)
+        sim_hours = max(len(pv_power), 1)
+        co2_annual = co2_avoided * (8760 / sim_hours) if sim_hours > 0 else 0
+        st.metric("🌱 CO₂ 감축", f"{co2_annual:,.0f} tCO₂/yr")
+    with c4:
+        st.metric("⚡ PUE", f"{pue:.2f}")
+    with c5:
+        st.metric("🔋 자급률", f"{self_sufficiency:.1f}%")
+    with c6:
+        st.metric("⏱️ 회수기간", f"{base.get('payback_years', 0):.1f}년")
+
+
 def create_main_dashboard():
     """메인 대시보드 구성"""
     st.title("⚡ CEMS Digital Twin")
@@ -127,6 +181,47 @@ def create_main_dashboard():
     # 사이드바 - 시스템 파라미터 설정
     with st.sidebar:
         st.header("🔧 시스템 설정")
+        
+        # ── UP1: 시연 시나리오 프리셋 ──
+        st.subheader("📋 시연 시나리오")
+        demo_scenario = st.selectbox(
+            "프리셋 선택",
+            ["(수동 설정)", "A: 기본 100MW AIDC", "B: CSP 비교", "C: 정책 시나리오", "D: Solar Battery 2030+"],
+            key="demo_scenario"
+        )
+        
+        # 시나리오별 파라미터 프리셋 적용
+        _scenario_presets = {
+            "A: 기본 100MW AIDC": {
+                "pv_type": "c-Si", "pv_capacity": 100, "gpu_type": "H100",
+                "gpu_count": 50000, "pue_tier": "tier3", "sim_hours": 168,
+                "carbon_price": 25000, "discount_rate": 5.0, "elec_price": 80000,
+            },
+            "B: CSP 비교": {
+                "pv_type": "tandem", "pv_capacity": 150, "gpu_type": "B200",
+                "gpu_count": 30000, "pue_tier": "tier4", "sim_hours": 168,
+                "carbon_price": 25000, "discount_rate": 5.0, "elec_price": 80000,
+            },
+            "C: 정책 시나리오": {
+                "pv_type": "tandem", "pv_capacity": 100, "gpu_type": "H100",
+                "gpu_count": 50000, "pue_tier": "tier3", "sim_hours": 168,
+                "carbon_price": 80000, "discount_rate": 5.0, "elec_price": 120000,
+            },
+            "D: Solar Battery 2030+": {
+                "pv_type": "infinite", "pv_capacity": 100, "gpu_type": "next_gen",
+                "gpu_count": 50000, "pue_tier": "tier4", "sim_hours": 168,
+                "carbon_price": 50000, "discount_rate": 4.0, "elec_price": 100000,
+            },
+        }
+        
+        if demo_scenario != "(수동 설정)" and demo_scenario in _scenario_presets:
+            preset = _scenario_presets[demo_scenario]
+            st.info(f"🎯 {demo_scenario} 프리셋 적용됨")
+            # 프리셋 값을 session_state에 저장 (위젯 기본값으로 사용)
+            for k, v in preset.items():
+                if k not in st.session_state or st.session_state.get('_last_scenario') != demo_scenario:
+                    st.session_state[k] = v
+            st.session_state['_last_scenario'] = demo_scenario
         
         # 언어 선택
         language = st.selectbox(
@@ -255,6 +350,9 @@ def create_main_dashboard():
     
     # 메인 영역 - 결과 표시
     if st.session_state.simulation_data is not None:
+        # ── UP2: 핵심 KPI 대시보드 (상단 고정) ──
+        _display_top_kpi(st.session_state.simulation_data)
+        st.divider()
         display_results()
     else:
         st.info("좌측 사이드바에서 파라미터를 설정하고 '시뮬레이션 실행' 버튼을 눌러주세요.")
@@ -1533,6 +1631,54 @@ def display_h2_results(data):
     except:
         st.info("Round-trip 효율 계산을 위한 데이터가 부족합니다.")
     
+    # ── Solar Battery H₂ (2030+ Emerging Technology) ──
+    st.subheader("🔬 Solar Battery H₂ (2030+ Emerging Technology)")
+    st.caption("Ref: Nature Communications (Ulm/Jena) — Water-soluble polymer 기반 태양광→H₂ 직접 변환")
+
+    sb_enabled = st.toggle("Solar Battery 시나리오 활성화", value=False, key="sb_toggle")
+    if sb_enabled:
+        from modules.m05_h2 import solar_battery_h2_production
+        from config import H2_SOLAR_BATTERY_CONFIG
+
+        sb_col1, sb_col2, sb_col3 = st.columns(3)
+        with sb_col1:
+            sb_area = st.number_input("집광 면적 (m²)", value=10000, min_value=100, step=1000, key="sb_area")
+            sb_irr = st.number_input("일사량 (kWh/m²/day)", value=5.0, min_value=0.1, step=0.5, key="sb_irr")
+        with sb_col2:
+            sb_eta_c = st.slider("η_capture", 0.50, 0.95, float(H2_SOLAR_BATTERY_CONFIG["eta_capture"]), 0.01, key="sb_eta_c")
+            sb_eta_h = st.slider("η_H₂", 0.40, 0.90, float(H2_SOLAR_BATTERY_CONFIG["eta_h2"]), 0.01, key="sb_eta_h")
+        with sb_col3:
+            sb_days = st.slider("저장 일수", 0, 14, int(H2_SOLAR_BATTERY_CONFIG["storage_days_default"]), key="sb_days")
+            sb_years = st.slider("운전 년수", 0, 20, 0, key="sb_years")
+
+        sb_result = solar_battery_h2_production(
+            solar_irradiance_kwh_per_m2=sb_irr,
+            area_m2=sb_area,
+            eta_capture=sb_eta_c,
+            eta_h2=sb_eta_h,
+            storage_days=sb_days,
+            operating_years=sb_years,
+        )
+
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.metric("H₂ 생산량", f"{sb_result['h2_production_kg']:.2f} kg/day")
+        with m2:
+            st.metric("STH 효율", f"{sb_result['sth_efficiency']:.1%}")
+        with m3:
+            st.metric("저장 손실", f"{(1 - sb_result['storage_loss_factor']):.1%}")
+        with m4:
+            st.metric("TRL", sb_result['trl'], delta="2030+ Emerging")
+
+        # 비용 전망 테이블
+        st.markdown("**💰 Solar Battery H₂ 비용 전망 ($/kg)**")
+        cost_proj = H2_SOLAR_BATTERY_CONFIG["cost_projections_usd_per_kg"]
+        cost_rows = []
+        for yr, scenarios in cost_proj.items():
+            cost_rows.append({"연도": yr, "낙관": f"${scenarios['optimistic']:.1f}",
+                              "기본": f"${scenarios['base']:.1f}", "보수": f"${scenarios['conservative']:.1f}"})
+        st.dataframe(pd.DataFrame(cost_rows), use_container_width=True, hide_index=True)
+
     # BNEF LCOH 국가별 비교
     st.subheader("🌍 국가별 Green H₂ LCOH 비교 (BNEF 2025)")
     from modules.m05_h2 import BNEF_LCOH_2025, compare_lcoh_all
@@ -1815,9 +1961,9 @@ def display_statistics(data):
             if len(pv_power) > 0:
                 pv_cap = pv_module.capacity_mw if hasattr(pv_module, 'capacity_mw') else 100
                 cf = np.mean(pv_power) / pv_cap if pv_cap > 0 else 0
-                st.metric("PV Capacity Factor", f"{cf*100:.1f}%")
+                st.metric("PV 이용률", f"{cf*100:.1f}%")
             else:
-                st.metric("PV Capacity Factor", "N/A")
+                st.metric("PV 이용률", "N/A")
         with col2:
             if len(aidc_power) > 0:
                 st.metric("평균 AIDC 부하", f"{np.mean(aidc_power):.1f} MW")
@@ -1832,9 +1978,9 @@ def display_statistics(data):
         with col4:
             if ems_kpi:
                 curt = ems_kpi.get('curtailment_pct', 0)
-                st.metric("Curtailment", f"{curt:.1f}%")
+                st.metric("출력제한율", f"{curt:.1f}%")
             else:
-                st.metric("Curtailment", "N/A")
+                st.metric("출력제한율", "N/A")
         
         st.divider()
         

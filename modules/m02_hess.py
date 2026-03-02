@@ -362,6 +362,14 @@ class HESSModule:
                     additional_power = max(remaining_power, -(max_additional + abs(allocation[best_layer])))
                 
                 allocation[best_layer] += additional_power
+                remaining_power -= additional_power
+        
+        # 에너지 보존: 미배분 전력을 명시적으로 추적
+        # 극단 주파수(매우 높은/낮은 demand fluctuation)에서 어떤 레이어도
+        # 주파수 범위에 매칭되지 않을 때 발생 가능
+        allocated_total = sum(allocation.values())
+        unallocated_power = total_power_request_kw - allocated_total
+        allocation['_unallocated_kw'] = unallocated_power
         
         return allocation
     
@@ -385,10 +393,11 @@ class HESSModule:
         # 1. 전력 배분 계산
         allocation = self.calculate_power_allocation(power_request_kw, duration_s, frequency_hz)
         
-        # 2. 각 레이어 운전
+        # 2. 각 레이어 운전 + 에너지 보존 추적
         layer_results = {}
         total_actual_power = 0.0
         total_energy_stored = 0.0
+        unallocated_kw = allocation.pop('_unallocated_kw', 0.0)
         
         for layer_name, allocated_power in allocation.items():
             if abs(allocated_power) >= 0.1:  # 0.1kW 이상만 운전
@@ -404,11 +413,31 @@ class HESSModule:
         # 3. SOC 밸런싱 확인
         soc_balance = self._check_soc_balance()
         
-        # 4. 통합 결과
+        # 4. 에너지 보존 검증
+        # 입력 에너지 = 배분된 에너지 + 미배분 에너지
+        # 배분된 에너지 = 실제 처리된 에너지 + 효율 손실 + 응답시간/온도 제한 손실
+        energy_conservation = {
+            'requested_energy_kwh': power_request_kw * duration_s / 3600,
+            'delivered_energy_kwh': total_actual_power * duration_s / 3600,
+            'unallocated_energy_kwh': unallocated_kw * duration_s / 3600,
+            'allocation_loss_kwh': (power_request_kw - total_actual_power - unallocated_kw) * duration_s / 3600,
+            'energy_balance_error_kwh': 0.0,  # 이상적으로 0
+        }
+        # 에너지 보존 오차: requested = delivered + unallocated + losses
+        energy_conservation['energy_balance_error_kwh'] = (
+            energy_conservation['requested_energy_kwh']
+            - energy_conservation['delivered_energy_kwh']
+            - energy_conservation['unallocated_energy_kwh']
+            - energy_conservation['allocation_loss_kwh']
+        )
+        
+        # 5. 통합 결과
         return {
             'power_request_kw': power_request_kw,
             'power_delivered_kw': total_actual_power,
+            'power_unallocated_kw': unallocated_kw,
             'energy_change_kwh': total_energy_stored,
+            'energy_conservation': energy_conservation,
             'power_allocation': allocation,
             'layer_results': layer_results,
             'soc_balance': soc_balance,

@@ -303,9 +303,9 @@ class EconomicsModule:
                       annual_grid_import_mwh: float = 550000.0,
                       annual_surplus_mwh: float = 5000.0,
                       include_learning_curve: bool = False,
-                      demand_charge_saving_billion_krw: float = 280.0,
-                      grid_reliability_benefit_billion_krw: float = 220.0,
-                      bess_arbitrage_billion_krw: float = 130.0) -> Dict:
+                      demand_charge_saving_billion_krw: Optional[float] = None,
+                      grid_reliability_benefit_billion_krw: Optional[float] = None,
+                      bess_arbitrage_billion_krw: Optional[float] = None) -> Dict:
         """
         Base Case 경제성 분석
 
@@ -360,10 +360,18 @@ class EconomicsModule:
                 learning_curve_on=include_learning_curve,
             )
 
-            # 추가 수익: 수요요금 절감, 그리드 안정성 가치, BESS 차익거래
-            additional = (demand_charge_saving_billion_krw +
-                         grid_reliability_benefit_billion_krw +
-                         bess_arbitrage_billion_krw)
+            # 추가 수익: 수요요금 절감 + 그리드 안정성 가치 + BESS 차익거래
+            # 산출근거는 config.py ECONOMICS_CONFIG 참조 (총 630억원/년)
+            #   (1) 수요요금 절감 280억: 피크시프팅 + TOU 차익 (KEPCO 산업용 갑 기준)
+            #   (2) 그리드 안정성 220억: 정전회피 + FR 서비스 + RE100 + 용량시장
+            #   (3) BESS 차익거래 130억: 에너지 아비트라지 + 보조서비스 + 피크셰이빙
+            _demand = demand_charge_saving_billion_krw if demand_charge_saving_billion_krw is not None \
+                else c.get("additional_revenue_demand_charge_billion_krw", 280.0)
+            _grid_rel = grid_reliability_benefit_billion_krw if grid_reliability_benefit_billion_krw is not None \
+                else c.get("additional_revenue_grid_reliability_billion_krw", 220.0)
+            _bess_arb = bess_arbitrage_billion_krw if bess_arbitrage_billion_krw is not None \
+                else c.get("additional_revenue_bess_arbitrage_billion_krw", 130.0)
+            additional = _demand + _grid_rel + _bess_arb
             inflation_yr = (1 + self.config["inflation_rate"]) ** yr
             net_cf = rev["total_revenue_billion_krw"] + additional * inflation_yr - opex["total_opex_billion_krw"]
             annual_cashflows.append(net_cf)
