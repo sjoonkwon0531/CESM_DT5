@@ -138,8 +138,8 @@ def _display_top_kpi(data):
     # 경제성 계산 (캐시 활용 — UP4)
     base = _cached_base_case()
     
-    total_pv = sum(pv_power) if pv_power else 0
-    total_aidc = sum(aidc_power) if aidc_power else 0
+    total_pv = float(np.sum(pv_power)) if len(pv_power) > 0 else 0
+    total_aidc = float(np.sum(aidc_power)) if len(aidc_power) > 0 else 0
     self_sufficiency = min(total_pv / total_aidc * 100, 100) if total_aidc > 0 else 0
     
     # PUE
