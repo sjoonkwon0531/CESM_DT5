@@ -74,6 +74,21 @@ CSP_PROFILES = {
         "grid_capacity_mw": 80,
         "capex_multiplier": 1.10,    # 소규모 → 단위비용 ↑
     },
+    "google_korea": {
+        "name": "구글 코리아",
+        "description": "하이퍼스케일 AIDC (LG U+ DBO)",
+        "power_demand_mw": 150,       # 조 단위 투자 → 150-200MW급 추정
+        "pue": 1.10,                  # Google 글로벌 평균 1.10
+        "workload_mix": {"training": 0.25, "inference": 0.55, "hpc": 0.20},
+        "export_ratio": 0.05,         # 국내 서비스 중심 (Gemini, YouTube, Cloud)
+        "re100_committed": True,      # Google RE100 24/7 CFE 목표
+        "land_available_ha": 100,
+        "grid_capacity_mw": 130,
+        "capex_multiplier": 1.20,     # 글로벌 기준 건설, DBO 프리미엄
+        "partner": "LG U+",
+        "dbo_model": True,            # Design-Build-Operate
+        "reference": "조선비즈 2026.03.05",
+    },
 }
 
 # 100MW 기준 CAPEX (억원) — config에서 가져오되, 스케일링용 기준값
@@ -145,6 +160,15 @@ CSP_ENERGY_STRATEGIES = {
         "energy_mix": {"grid": 0.60, "fuel_cell": 0.25, "solar": 0.15},
         "strategy": "HYBRID",
         "example": "세종 각 데이터센터"
+    },
+    "Google_Korea": {
+        "name": "Co-located + DBO (한국형)",
+        "description": "LG U+ DBO 모델 + PPA 태양광 + 그리드, Google 24/7 CFE 목표 적용",
+        "energy_mix": {"grid": 0.55, "solar": 0.30, "wind": 0.10, "ess": 0.05},
+        "ppa_years": 15,
+        "strategy": "DBO_HYBRID",
+        "capex_premium": 1.20,
+        "example": "LG U+ DBO, 2026 착공 예정 (조선비즈 2026.03.05)"
     }
 }
 

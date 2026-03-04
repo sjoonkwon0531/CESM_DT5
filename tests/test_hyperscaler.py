@@ -4,7 +4,7 @@ import pytest
 
 def test_csp_energy_strategies_exist():
     from modules.m12_industry import CSP_ENERGY_STRATEGIES
-    assert len(CSP_ENERGY_STRATEGIES) == 6
+    assert len(CSP_ENERGY_STRATEGIES) == 7
     for name in ["Google", "Amazon", "Meta", "Microsoft", "Samsung_SDS", "Naver"]:
         assert name in CSP_ENERGY_STRATEGIES
         assert "energy_mix" in CSP_ENERGY_STRATEGIES[name]
@@ -22,7 +22,7 @@ def test_get_csp_strategy():
 def test_compare_csp_strategies():
     from modules.m12_industry import compare_csp_strategies
     results = compare_csp_strategies()
-    assert len(results) == 6
+    assert len(results) == 7
     for r in results:
         assert "lcoe_krw_per_kwh" in r
         assert "carbon_tco2_per_mwh" in r

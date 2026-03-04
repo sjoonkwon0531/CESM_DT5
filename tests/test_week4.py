@@ -131,7 +131,7 @@ class TestIndustryModel:
     def test_all_csp_comparison(self):
         """전체 CSP 비교"""
         results = self.model.all_csp_comparison()
-        assert len(results) == 4
+        assert len(results) == 5
 
     def test_csp_with_subsidy(self):
         """보조금 적용 시 CAPEX 감소"""
