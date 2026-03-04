@@ -577,10 +577,11 @@ def display_results():
         with t4: display_ems_results(data)
     
     elif category == "💰 경제·분석":
-        t1, t2, t3 = st.tabs(["🌍 탄소 회계", "💰 경제성", "📈 통계 분석"])
+        t1, t2, t3, t4 = st.tabs(["🌍 탄소 회계", "💰 경제성", "📈 통계 분석", "⚡ Useful Energy"])
         with t1: display_carbon_results(data)
         with t2: display_economics_results(data)
         with t3: display_statistics(data)
+        with t4: display_useful_energy(data)
     
     elif category == "🏛️ 전략·정책":
         t1, t2, t3 = st.tabs(["🏛️ 정책 시뮬레이터", "🏭 산업 상용화", "📋 투자 대시보드"])
@@ -2944,6 +2945,201 @@ def display_international_comparison(data):
     - 🤖 **AI-EMS 3단계 최적화**: LP 기반 실시간 디스패치 → Rule-based 대비 비용 절감
     - 🏢 **AIDC 전용 설계**: GPU 워크로드 특성 반영 (타국은 범용 마이크로그리드)
     """)
+
+
+# ═══════════════════════════════════════════════════════════════
+# Ember Useful Energy Framework
+# ═══════════════════════════════════════════════════════════════
+def display_useful_energy(data):
+    """Ember Useful Energy Framework — 유효에너지 관점 분석"""
+    from config import EMBER_USEFUL_ENERGY as UE
+
+    st.subheader("⚡ Useful Energy Framework")
+    st.caption(
+        "Ember (2026) 'Reframing Energy for the Age of Electricity' — "
+        "1차 에너지 총량이 아닌 소비자 관점의 유효에너지(Useful Energy)로 에너지 시스템 재해석"
+    )
+
+    # ── 1. 글로벌 에너지 흐름 Sankey ──
+    st.markdown("### 글로벌 에너지 흐름 (2023)")
+    labels = [
+        "Electro (31 EJ)", "Thermal (560 EJ)",  # Primary 0,1
+        "Electrons (91 EJ)", "Molecules (296 EJ)",  # Final 2,3
+        "Work (90 EJ)", "Heat (119 EJ)",  # Useful 4,5
+        "System Loss (380 EJ)", "Non-energy (42 EJ)"  # Loss 6,7
+    ]
+    source = [0, 1, 1, 1, 2, 2, 3, 3, 3]
+    target = [2, 2, 3, 6, 4, 5, 4, 5, 7]
+    # Approximate flows based on efficiency matrix
+    value =  [29, 26, 252, 282, 62, 29, 28, 90, 42]
+
+    fig_sankey = go.Figure(go.Sankey(
+        arrangement="snap",
+        node=dict(
+            pad=20, thickness=25,
+            label=labels,
+            color=["#22c55e", "#f97316", "#3b82f6", "#f59e0b",
+                   "#6366f1", "#ef4444", "#9ca3af", "#d1d5db"]
+        ),
+        link=dict(source=source, target=target, value=value,
+                  color=["rgba(34,197,94,0.3)", "rgba(59,130,246,0.3)",
+                         "rgba(245,158,11,0.3)", "rgba(156,163,175,0.2)",
+                         "rgba(99,102,241,0.3)", "rgba(239,68,68,0.3)",
+                         "rgba(99,102,241,0.15)", "rgba(239,68,68,0.15)",
+                         "rgba(209,213,219,0.3)"])
+    ))
+    fig_sankey.update_layout(height=400, template="plotly_white",
+                             title="Primary → Final → Useful Energy (2023, EJ)",
+                             font=dict(size=12))
+    st.plotly_chart(fig_sankey, use_container_width=True)
+
+    col_loss, col_useful = st.columns(2)
+    col_loss.metric("시스템 손실", "380 EJ", delta="1차 에너지의 2/3", delta_color="inverse")
+    col_useful.metric("유효 에너지", "209 EJ", delta="실제 사용되는 에너지")
+
+    # ── 2. 4-Battle 효율 매트릭스 ──
+    st.markdown("### 4-Battle 효율 매트릭스")
+    st.markdown("에너지 전환의 4대 전장 — 전기화(Electrification)가 3/4에서 승리")
+
+    eff_p2f = UE["efficiency_primary_to_final"]
+    eff_f2u = UE["efficiency_final_to_useful"]
+
+    battles = [
+        ("⚡ Battle 1\n전력 공급", "Electro→Electrons", eff_p2f["electro_to_electrons"],
+         "Thermal→Electrons", eff_p2f["thermal_to_electrons"], True),
+        ("⚙️ Battle 2\n유효 일", "Electrons→Work", eff_f2u["electrons_to_work"],
+         "Molecules→Work", eff_f2u["molecules_to_work"], True),
+        ("🔥 Battle 3\n유효 열", "Electrons→Heat", eff_f2u["electrons_to_heat"],
+         "Molecules→Heat", eff_f2u["molecules_to_heat"], True),
+        ("🧪 Battle 4\n분자 합성", "Electro→Molecules", eff_p2f["electro_to_molecules"],
+         "Thermal→Molecules", eff_p2f["thermal_to_molecules"], False),
+    ]
+
+    fig_battle = make_subplots(rows=1, cols=4, subplot_titles=[b[0] for b in battles])
+    for i, (_, elec_label, elec_eff, therm_label, therm_eff, elec_wins) in enumerate(battles):
+        col = i + 1
+        colors = ["#22c55e" if elec_wins else "#f97316",
+                  "#f97316" if elec_wins else "#22c55e"]
+        fig_battle.add_trace(go.Bar(
+            x=[elec_label, therm_label], y=[elec_eff * 100, therm_eff * 100],
+            marker_color=colors,
+            text=[f"{elec_eff:.0%}", f"{therm_eff:.0%}"],
+            textposition="auto", showlegend=False
+        ), row=1, col=col)
+        fig_battle.update_yaxes(range=[0, 105], row=1, col=col)
+
+    fig_battle.update_layout(height=350, template="plotly_white",
+                              margin=dict(t=60, b=30))
+    st.plotly_chart(fig_battle, use_container_width=True)
+
+    b1, b2, b3, b4 = st.columns(4)
+    b1.success("✅ Electro 승리\n92% vs 29%")
+    b2.success("✅ Electrons 승리\n68% vs 29%")
+    b3.success("✅ Electrons 승리\n91% vs 64%")
+    b4.error("❌ Thermal 우위\n85% vs <70%")
+
+    # ── 3. AIDC 경로 효율 비교 ──
+    st.markdown("### 본 AIDC 마이크로그리드의 에너지 경로")
+    st.markdown("PV(Electro) → DC Bus(Electrons) → AIDC GPU(Work) = **최적 경로**")
+
+    pathways = UE["aidc_pathway_efficiency"]
+    path_names = [
+        "Electro→Electron→Work\n(본 DT 경로)",
+        "Thermal→Molecule→Work\n(디젤 발전기)",
+        "Thermal→Electron→Work\n(석탄/가스 발전)",
+        "Electro→Molecule→Work\n(그린수소→연료전지)"
+    ]
+    path_vals = [pathways["electro_electron_work"], pathways["thermal_molecule_work"],
+                 pathways["thermal_electron_work"], pathways["electro_molecule_work"]]
+    path_colors = ["#22c55e", "#ef4444", "#f97316", "#6366f1"]
+
+    fig_path = go.Figure(go.Bar(
+        x=path_names, y=[v * 100 for v in path_vals],
+        marker_color=path_colors,
+        text=[f"{v:.1%}" for v in path_vals],
+        textposition="auto"
+    ))
+    fig_path.update_layout(height=350, template="plotly_white",
+                           title="1차 에너지 → 유효 에너지(Work) 전체 경로 효율",
+                           yaxis_title="End-to-End Efficiency (%)",
+                           yaxis_range=[0, 75])
+    st.plotly_chart(fig_path, use_container_width=True)
+
+    # AIDC specific calculation
+    aidc_data = data.get('aidc')
+    if aidc_data is not None and hasattr(aidc_data, '__len__') and 'total_power_mw' in aidc_data:
+        total_energy_mwh = float(np.sum(aidc_data['total_power_mw']))
+        # Useful energy via Electro pathway
+        useful_via_electro = total_energy_mwh * pathways["electro_electron_work"]
+        # Same useful energy via Thermal pathway would require:
+        primary_thermal_needed = useful_via_electro / pathways["thermal_molecule_work"]
+        saved_ej = (primary_thermal_needed - total_energy_mwh) / 277_778  # MWh to EJ
+
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("AIDC 총 에너지", f"{total_energy_mwh:,.0f} MWh")
+        mc2.metric("Electro 유효에너지", f"{useful_via_electro:,.0f} MWh",
+                   delta=f"효율 {pathways['electro_electron_work']:.1%}")
+        mc3.metric("Thermal 대비 절감", f"{(1 - pathways['thermal_molecule_work']/pathways['electro_electron_work']):.0%}",
+                   delta="1차 에너지 투입 절감")
+
+    # ── 4. 시장 전환 지표 ──
+    st.markdown("### 시장 전환 속도 (Stocks vs Flows)")
+    mt = UE["market_transition"]
+
+    fig_sf = make_subplots(rows=1, cols=3,
+                           subplot_titles=["전력 생산", "유효 일 (Work)", "유효 열 (Heat)"])
+
+    categories = ["누적\n(Stock)", "성장분\n(Flow)"]
+    datasets = [
+        (mt["electro_share_generation_2023_pct"], mt["electro_share_generation_growth_2025_pct"]),
+        (mt["electrons_share_useful_work_2023_pct"], mt["electrons_share_useful_work_growth_pct"]),
+        (mt["electrons_share_useful_heat_2023_pct"], mt["electrons_share_useful_heat_growth_pct"]),
+    ]
+
+    for i, (stock, flow) in enumerate(datasets):
+        col = i + 1
+        fig_sf.add_trace(go.Bar(
+            x=categories, y=[stock, flow],
+            marker_color=["#94a3b8", "#22c55e"],
+            text=[f"{stock}%", f"{flow}%"],
+            textposition="auto", showlegend=False
+        ), row=1, col=col)
+        fig_sf.update_yaxes(range=[0, 105], row=1, col=col)
+
+    fig_sf.update_layout(height=300, template="plotly_white",
+                          title="Electro/Electrons 점유율: 누적(Stock) vs 성장분(Flow)")
+    st.plotly_chart(fig_sf, use_container_width=True)
+
+    st.info(
+        "💡 **핵심 인사이트**: 누적 점유율(Stock)만 보면 전기화가 느려 보이지만, "
+        "신규 성장분(Flow)에서는 이미 전기화가 압도적입니다. "
+        "전력 생산 성장의 96%, 유효 일 성장의 80%가 이미 전기화 경로입니다."
+    )
+
+    with st.expander("📖 Ember Framework 상세"):
+        st.markdown(f"""
+**"Reframing Energy for the Age of Electricity"** (Ember, 2026.02.17)
+
+| 저자 | Daan Walter, Kingsmill Bond, Sam Butler-Sloss, Antoine Issac, Michael Liebreich |
+|------|------|
+| **데이터** | IEA World Energy Balance 2023 + IIASA PFU + Nick Eyre (Oxford) |
+| **핵심 주장** | 1차 에너지 총량이 아닌 유효에너지(Useful Energy) 관점으로 전환해야 에너지 전환의 실체가 보인다 |
+
+**6가지 개선 (Six Improvements):**
+1. 유효에너지(Useful Energy) 도입 — 실제 서비스 기준
+2. 소비자 관점 분석 — 공급이 아닌 수요에서 출발
+3. Work/Heat 단순화 — 모든 에너지는 운동 또는 온도 변화
+4. Electrons/Molecules 구분 — 전달 매체의 물리적 차이
+5. Electro/Thermal 분류 — 1차 에너지원의 본질
+6. Stocks vs Flows — 변화량 중심 분석
+
+**본 DT와의 관계:**
+- PV(Electro) → HESS(Electrons) → AIDC(Work) = **최적 효율 경로 (62.6%)**
+- 기존 화석연료 경로(8.4~24.7%) 대비 **2.5~7.4배 효율적**
+- 시스템 손실 380 EJ의 대부분은 **카르노 한계에 의한 열→일 변환 손실** → 전기화로 우회
+
+[Source: Ember Climate](https://ember-climate.org/) | IEA WEB | IIASA PFU
+        """)
 
 
 # ═══════════════════════════════════════════════════════════════

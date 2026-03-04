@@ -662,3 +662,75 @@ BENCHMARK_API_SOURCES = {
 }
 
 BENCHMARK_LAST_UPDATED = '2026-02-22'
+
+# =============================================================================
+# Ember Useful Energy Framework (2026-02-17)
+# Ref: "Reframing Energy for the Age of Electricity"
+#   Authors: Daan Walter, Kingsmill Bond, Sam Butler-Sloss, Antoine Issac, Michael Liebreich
+#   Data: IEA WEB 2023, IIASA PFU methodology, Nick Eyre (Oxford) Work/Heat framework
+# =============================================================================
+EMBER_USEFUL_ENERGY = {
+    # ── 글로벌 에너지 잔고 (2023, EJ) ──
+    "primary_energy_ej": {
+        "electro": 31,       # 태양광 + 풍력 + 수력
+        "thermal": 560,      # 화석연료 + 원자력 + 바이오매스
+        "total": 591,
+    },
+    "final_energy_ej": {
+        "electrons": 91,     # 전력
+        "molecules": 296,    # 화석연료/바이오매스 직접 소비
+        "total": 387,
+    },
+    "useful_energy_ej": {
+        "work": 90,          # 운동 에너지 (운송, 기계, 컴퓨팅)
+        "heat": 119,         # 열 에너지 (난방, 공정열)
+        "total": 209,
+    },
+    "non_energy_use_ej": 42,    # 석유화학 원료 등
+    "system_loss_ej": 380,      # 전체 1차 에너지의 ~2/3
+
+    # ── 4-Battle 효율 매트릭스 (%) ──
+    # Primary → Final
+    "efficiency_primary_to_final": {
+        "electro_to_electrons": 0.92,   # Battle 1: 태양광/풍력 → 전력
+        "thermal_to_electrons": 0.29,   # Battle 1: 화석/원자력 → 전력 (카르노 한계)
+        "thermal_to_molecules": 0.85,   # Battle 4: 화석연료 → 정제연료
+        "electro_to_molecules": 0.70,   # Battle 4: 그린수소 등 (<70%)
+    },
+    # Final → Useful
+    "efficiency_final_to_useful": {
+        "electrons_to_work": 0.68,      # Battle 2: 전력 → 유효 일 (모터 90%+)
+        "molecules_to_work": 0.29,      # Battle 2: 분자 연소 → 일 (카르노 한계)
+        "electrons_to_heat": 0.91,      # Battle 3: 전력 → 유효 열 (히트펌프 300-400%)
+        "molecules_to_heat": 0.64,      # Battle 3: 분자 연소 → 열
+    },
+
+    # ── 1인당 에너지 (GJ/capita) ──
+    "per_capita_gj": {
+        "primary_energy": 75,
+        "useful_energy": 26,
+        "shell_projection": 100,  # Shell의 고발전 시나리오 (과대추정)
+    },
+
+    # ── 시장 전환 지표 ──
+    "market_transition": {
+        "electro_share_generation_2023_pct": 30,      # 누적 전력 생산 점유율
+        "electro_share_generation_growth_2025_pct": 96,  # 2025년 9개월 성장분 점유율
+        "electrons_share_useful_work_2023_pct": 53,    # 유효 일 중 전력 비중
+        "electrons_share_useful_work_growth_pct": 80,  # 2019-23 유효 일 성장분
+        "electrons_share_useful_heat_2023_pct": 16,    # 유효 열 중 전력 비중
+        "electrons_share_useful_heat_growth_pct": 25,  # 2019-23 유효 열 성장분
+    },
+
+    # ── AIDC 마이크로그리드 적용 ──
+    # PV(Electro) → DC Bus(Electrons) → AIDC(Work) 경로 효율
+    # 전체 경로: 0.92 × 0.68 = 0.626 (62.6%)
+    # vs Thermal 경로: 0.29 × 0.29 = 0.084 (8.4%)
+    # → Electro-Electron-Work 경로가 Thermal 대비 7.4배 효율적
+    "aidc_pathway_efficiency": {
+        "electro_electron_work": 0.92 * 0.68,   # 62.6%
+        "thermal_electron_work": 0.29 * 0.68,   # 19.7%
+        "thermal_molecule_work": 0.85 * 0.29,   # 24.7%
+        "electro_molecule_work": 0.70 * 0.29,   # 20.3%
+    },
+}
