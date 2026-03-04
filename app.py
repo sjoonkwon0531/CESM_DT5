@@ -186,7 +186,7 @@ def create_main_dashboard():
         st.subheader("📋 시연 시나리오")
         demo_scenario = st.selectbox(
             "프리셋 선택",
-            ["(수동 설정)", "A: 기본 100MW AIDC", "B: CSP 비교", "C: 정책 시나리오", "D: Solar Battery 2030+"],
+            ["(수동 설정)", "A: 기본 100MW AIDC", "B: CSP 비교", "C: 정책 시나리오", "D: Solar Battery 2030+", "E: Grid Flex 실증"],
             key="demo_scenario"
         )
         
@@ -211,6 +211,11 @@ def create_main_dashboard():
                 "pv_type": "infinite", "pv_capacity": 100, "gpu_type": "next_gen",
                 "gpu_count": 50000, "pue_tier": "tier4", "sim_hours": 168,
                 "carbon_price": 50000, "discount_rate": 4.0, "elec_price": 100000,
+            },
+            "E: Grid Flex 실증": {
+                "pv_type": "tandem", "pv_capacity": 150, "gpu_type": "B200_Ultra",
+                "gpu_count": 50000, "pue_tier": "tier3", "sim_hours": 168,
+                "carbon_price": 25000, "discount_rate": 5.0, "elec_price": 80000,
             },
         }
         
@@ -1063,6 +1068,114 @@ def display_aidc_results(data):
     legend_parts = [f"{event_labels.get(k,k)}: {v}회" for k, v in event_counts.items() if k != 'normal']
     if legend_parts:
         st.caption("이벤트: " + " | ".join(legend_parts))
+
+    # ── Grid Flexibility 시뮬레이터 ──
+    st.subheader("⚡ Grid Flexibility (Demand Response)")
+    st.caption(
+        "National Grid × Emerald AI × NVIDIA 런던 실증 (2025.12) 기반 — "
+        "96× Blackwell Ultra GPU 클러스터에서 워크로드 중단 없이 최대 40% 부하 감축 검증"
+    )
+
+    gf_col1, gf_col2, gf_col3 = st.columns(3)
+    with gf_col1:
+        gf_curtail = st.slider("감축 요청 (%)", 0, 40, 20, key="gf_curtail")
+    with gf_col2:
+        gf_mode = st.radio("모드", ["normal (점진적)", "emergency (30초)"], key="gf_mode", horizontal=True)
+    with gf_col3:
+        gf_hour = st.selectbox("시간대", list(range(24)), index=14, format_func=lambda h: f"{h:02d}:00", key="gf_hour")
+
+    mode_key = "emergency" if "emergency" in gf_mode else "normal"
+    base_load = aidc_module.calculate_load_at_time(gf_hour, 2, random_seed=100)
+    flex_result = aidc_module.grid_flex_response(base_load, gf_curtail, mode=mode_key, random_seed=101)
+
+    # 결과 메트릭
+    gm1, gm2, gm3, gm4 = st.columns(4)
+    gm1.metric("감축 전", f"{base_load['total_power_mw']:.1f} MW")
+    gm2.metric("감축 후", f"{flex_result['total_power_mw']:.1f} MW",
+               delta=f"-{flex_result['curtailed_mw']:.1f} MW")
+    gm3.metric("달성 감축률", f"{flex_result['curtailment_pct']:.1f}%")
+    gm4.metric("응답 시간", f"{flex_result['response_time_s']:.0f}초")
+
+    # 워크로드별 영향 바 차트
+    impact = flex_result.get('workload_impact', {})
+    if impact:
+        wl_names = []
+        wl_curtails = []
+        wl_colors = []
+        color_map = {'moe': '#60a5fa', 'llm': '#f87171', 'training': '#fbbf24'}
+        for wl, pct in impact.items():
+            wl_names.append(WORKLOAD_TYPES.get(wl, {}).get('name', wl))
+            wl_curtails.append(pct * 100)
+            wl_colors.append(color_map.get(wl, '#9ca3af'))
+
+        fig_impact = go.Figure(go.Bar(
+            x=wl_curtails, y=wl_names, orientation='h',
+            marker_color=wl_colors,
+            text=[f"{v:.0f}%" for v in wl_curtails],
+            textposition='auto'
+        ))
+        fig_impact.update_layout(
+            height=200, template='plotly_white',
+            title="워크로드별 감축 비율",
+            xaxis_title="감축률 (%)", xaxis_range=[0, 100],
+            margin=dict(l=10, r=10, t=40, b=30)
+        )
+        st.plotly_chart(fig_impact, use_container_width=True)
+
+    # 시간별 감축 시뮬레이션 (24시간)
+    st.markdown("**24시간 Grid Flex 프로파일**")
+    hours_24 = list(range(24))
+    base_powers = []
+    flex_powers = []
+    for h in hours_24:
+        bl = aidc_module.calculate_load_at_time(h, 2, random_seed=h + 200)
+        fl = aidc_module.grid_flex_response(bl, gf_curtail, mode=mode_key, random_seed=h + 300)
+        base_powers.append(bl['total_power_mw'])
+        flex_powers.append(fl['total_power_mw'])
+
+    fig_24 = go.Figure()
+    fig_24.add_trace(go.Scatter(
+        x=hours_24, y=base_powers, name='원래 부하',
+        line=dict(color=COLOR_PALETTE['aidc'], width=2)
+    ))
+    fig_24.add_trace(go.Scatter(
+        x=hours_24, y=flex_powers, name=f'{gf_curtail}% 감축 후',
+        line=dict(color='#22c55e', width=2, dash='dash'),
+        fill='tonexty', fillcolor='rgba(34,197,94,0.15)'
+    ))
+    fig_24.update_layout(
+        height=350, template='plotly_white',
+        title=f"AIDC 부하 — Grid Flex {gf_curtail}% 감축 ({mode_key})",
+        xaxis_title="시간 (hour)", yaxis_title="전력 (MW)",
+        legend=dict(orientation='h', y=1.12)
+    )
+    st.plotly_chart(fig_24, use_container_width=True)
+
+    with st.expander("📖 National Grid 실증 상세"):
+        st.markdown("""
+**UK-First AI Grid Flexibility Trial (December 2025)**
+
+| 항목 | 내용 |
+|------|------|
+| **참여 기관** | National Grid, Emerald AI, EPRI, Nebius, NVIDIA |
+| **위치** | 런던 Nebius 데이터센터 |
+| **GPU** | 96× NVIDIA Blackwell Ultra |
+| **기간** | 5일, 200+ 실시간 그리드 이벤트 |
+| **최대 감축** | 40% (워크로드 중단 없음) |
+| **긴급 응답** | 30% 부하 차단 ~30초 |
+| **지속 감축** | 최대 10시간 |
+| **시나리오** | 축구 하프타임 피크, 10시간 지속 감축, 시스템 스트레스 |
+
+> *"High-performance data centres don't have to place additional strain on the grid. 
+> They can be connected and managed without major new network capacity, 
+> flexing their power up or down in real time."*
+> — Steve Smith, President, National Grid Partners
+
+**핵심 시사점**: 데이터센터가 그리드의 **부담**이 아닌 **유연성 자산**이 될 수 있음을 실증.
+향후 'power flexible' 연결 기준 수립에 데이터 공유 예정.
+
+[Source: National Grid / Electrical Review, 3 March 2026](https://electricalreview.co.uk/2026/03/03/uk-first-ai-grid-trial-cuts-london-data-centre-power-demand-by-up-to-40/)
+        """)
 
 
 def display_dcbus_results(data):

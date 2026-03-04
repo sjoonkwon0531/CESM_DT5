@@ -90,6 +90,12 @@ GPU_TYPES = {
         "power_w": 1200,
         "memory_gb": 256,
         "fp16_tflops": 3000  # 추정값
+    },
+    "B200_Ultra": {
+        "name": "NVIDIA Blackwell Ultra",
+        "power_w": 1200,
+        "memory_gb": 288,
+        "fp16_tflops": 3500  # 추정값
     }
 }
 
@@ -384,6 +390,23 @@ AI_EMS_CONFIG = {
     "economic_optimization": True,
     "grid_trading_enabled": True,
     "maintenance_scheduling": True,
+
+    # Grid Flexibility (Demand Response)
+    # Ref: National Grid × Emerald AI × NVIDIA 런던 실증 (2025.12)
+    #   96× Blackwell Ultra GPU, 5일간 200+ 실시간 그리드 이벤트
+    #   최대 40% 부하 감축, 워크로드 중단 없이 달성
+    #   긴급 30% 감축 ~30초, 지속 감축 최대 10시간
+    "grid_flex_enabled": True,
+    "grid_flex_max_curtailment_pct": 40,   # 최대 감축률 (%) — National Grid 실증 검증
+    "grid_flex_emergency_pct": 30,         # 긴급 감축률 (%) — 30초 내 달성
+    "grid_flex_emergency_response_s": 30,  # 긴급 응답 시간 (초)
+    "grid_flex_sustained_hours": 10,       # 지속 감축 최대 시간
+    "grid_flex_ramp_rate_pct_per_min": 5,  # 분당 감축 속도 (%/min)
+    "grid_flex_workload_priority": {
+        "training": 3,    # 최우선 보호 (checkpoint 손실 위험)
+        "llm": 2,         # 중간 (배치 크기 축소로 대응)
+        "moe": 1,         # 유연 (expert 비활성화로 빠른 감축)
+    },
 }
 
 # =============================================================================

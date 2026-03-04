@@ -460,6 +460,114 @@ class AIDCModule:
             'cost_per_gpu_year': total_opex / self.gpu_count if self.gpu_count > 0 else 0
         }
     
+    def grid_flex_response(self,
+                          current_load: Dict[str, float],
+                          curtailment_pct: float,
+                          mode: str = "normal",
+                          random_seed: Optional[int] = None) -> Dict[str, float]:
+        """
+        그리드 유연성 응답 — 실시간 부하 감축
+        
+        National Grid × Emerald AI × NVIDIA 런던 실증 (2025.12) 기반:
+        - 96× Blackwell Ultra GPU, 5일간 200+ 실시간 그리드 이벤트
+        - 최대 40% 부하 감축, 워크로드 중단 없이 달성
+        - 긴급 30% 감축 ~30초, 지속 감축 최대 10시간
+        
+        감축 전략 (워크로드 우선순위 기반):
+        1. MoE expert 비활성화 (가장 유연)
+        2. LLM 추론 배치 크기 축소
+        3. Training job 일시 정지 (최후 수단)
+        
+        Args:
+            current_load: calculate_load_at_time() 결과
+            curtailment_pct: 요청 감축률 (0-40%)
+            mode: "normal" (점진적) | "emergency" (30초 내)
+            random_seed: 랜덤 시드
+            
+        Returns:
+            감축 후 부하 정보 + 감축 상세
+        """
+        if random_seed is not None:
+            np.random.seed(random_seed)
+        
+        from config import AI_EMS_CONFIG
+        max_curtail = AI_EMS_CONFIG.get("grid_flex_max_curtailment_pct", 40)
+        curtailment_pct = min(curtailment_pct, max_curtail)
+        
+        if curtailment_pct <= 0:
+            return {**current_load, 'curtailment_pct': 0.0, 'curtailed_mw': 0.0,
+                    'workload_impact': {}, 'response_time_s': 0.0}
+        
+        priority = AI_EMS_CONFIG.get("grid_flex_workload_priority",
+                                     {"training": 3, "llm": 2, "moe": 1})
+        
+        # 우선순위 낮은 워크로드부터 감축
+        sorted_workloads = sorted(self.workload_mix.keys(),
+                                  key=lambda w: priority.get(w, 1))
+        
+        remaining_curtail = curtailment_pct / 100.0
+        workload_curtailments = {}
+        original_gpu_power = current_load['gpu_power_mw']
+        
+        for wl in sorted_workloads:
+            if remaining_curtail <= 0:
+                break
+            
+            wl_ratio = self.workload_mix.get(wl, 0)
+            wl_util = current_load.get('workload_utils', {}).get(wl, 0.5)
+            wl_power_frac = wl_ratio * wl_util
+            
+            if wl_power_frac <= 0:
+                workload_curtailments[wl] = 0.0
+                continue
+            
+            # 워크로드별 최대 감축 가능률
+            if wl == 'moe':
+                max_wl_curtail = 0.80  # expert 비활성화로 80%까지
+            elif wl == 'llm':
+                max_wl_curtail = 0.50  # 배치 축소로 50%까지
+            else:  # training
+                max_wl_curtail = 0.30  # 일부 job 정지로 30%까지
+            
+            achievable = wl_power_frac * max_wl_curtail
+            actual = min(achievable, remaining_curtail)
+            
+            workload_curtailments[wl] = actual / wl_power_frac if wl_power_frac > 0 else 0
+            remaining_curtail -= actual
+        
+        # 실제 달성 감축률
+        achieved_pct = (curtailment_pct / 100.0 - remaining_curtail) * 100
+        curtailed_mw = original_gpu_power * achieved_pct / 100.0
+        
+        # 응답 시간 (초)
+        if mode == "emergency":
+            response_time = AI_EMS_CONFIG.get("grid_flex_emergency_response_s", 30)
+            response_time *= (0.8 + 0.4 * np.random.random())  # ±20% 변동
+        else:
+            ramp_rate = AI_EMS_CONFIG.get("grid_flex_ramp_rate_pct_per_min", 5)
+            response_time = (achieved_pct / ramp_rate) * 60  # 초
+        
+        # 감축 후 부하 계산
+        new_gpu_power = original_gpu_power - curtailed_mw
+        new_it_power = new_gpu_power * (1 + 0.12)  # additional IT ratio
+        new_total_power = new_it_power * self.pue_params['pue']
+        new_util = current_load['gpu_utilization'] * (1 - achieved_pct / 100.0)
+        
+        return {
+            'total_power_mw': new_total_power,
+            'it_power_mw': new_it_power,
+            'gpu_power_mw': new_gpu_power,
+            'gpu_utilization': float(np.clip(new_util, 0.05, 1.0)),
+            'pue': self.pue_params['pue'],
+            'curtailment_pct': achieved_pct,
+            'curtailment_requested_pct': curtailment_pct,
+            'curtailed_mw': curtailed_mw,
+            'workload_impact': workload_curtailments,
+            'response_time_s': float(response_time),
+            'mode': mode,
+            'reference': 'National Grid × Emerald AI × NVIDIA London Trial (Dec 2025)'
+        }
+
     def update_parameters(self, **kwargs) -> None:
         """파라미터 업데이트"""
         if 'gpu_type' in kwargs and kwargs['gpu_type'] in GPU_TYPES:
