@@ -1,0 +1,31 @@
+{
+  "name": "Intelligent Energy Solution",
+  "short_name": "IES NRL",
+  "description": "Renewable Microgrid Digital Twin for AI Data Centers — SKKU NRL",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B5CAB",
+  "theme_color": "#0B5CAB",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/sjoonkwon0531/CESM_DT5/main/icon_192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://raw.githubusercontent.com/sjoonkwon0531/CESM_DT5/main/icon_512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://raw.githubusercontent.com/sjoonkwon0531/CESM_DT5/main/icon_maskable_512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
