@@ -2,12 +2,14 @@
   "name": "Intelligent Energy Solution",
   "short_name": "IES NRL",
   "description": "Renewable Microgrid Digital Twin for AI Data Centers — SKKU NRL",
-  "start_url": "/",
+  "start_url": "https://cesmdt5-nbypqfhlppsdeu7gc8w3vg.streamlit.app/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0B5CAB",
   "theme_color": "#0B5CAB",
+  "categories": ["education", "productivity", "utilities"],
+  "lang": "ko",
   "icons": [
     {
       "src": "https://raw.githubusercontent.com/sjoonkwon0531/CESM_DT5/main/icon_192.png",
