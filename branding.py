@@ -155,15 +155,96 @@ def inject_brand_css():
     section[data-testid="stSidebar"] h1,
     section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] h3 {{
-        font-size: 0.78rem !important;
-        font-weight: 600 !important;
-        color: {BRAND["text_muted"]} !important;
+        font-size: 0.82rem !important;
+        font-weight: 700 !important;
+        color: {BRAND["text_secondary"]} !important;
         text-transform: uppercase !important;
         letter-spacing: 0.06em !important;
         margin-top: 1.5rem !important;
         margin-bottom: 0.5rem !important;
         padding-bottom: 0.4rem;
         border-bottom: 1px solid {BRAND["border"]};
+    }}
+
+    /* === 위젯 라벨 가독성 강화 (CRITICAL) ===
+       Streamlit 기본 라벨 색상이 너무 흐려 한국어 텍스트가 안 보이는 문제 해결.
+       모든 입력 위젯의 라벨을 진한 색으로 강제합니다. */
+    label,
+    [data-testid="stWidgetLabel"],
+    [data-testid="stWidgetLabel"] p,
+    [data-testid="stWidgetLabel"] label,
+    .stSlider label,
+    .stSelectbox label,
+    .stMultiSelect label,
+    .stCheckbox label,
+    .stRadio label,
+    .stTextInput label,
+    .stNumberInput label,
+    .stDateInput label,
+    .stTimeInput label,
+    .stTextArea label,
+    .stFileUploader label,
+    .stColorPicker label,
+    div[data-baseweb="select"] + label,
+    .stSlider [data-testid="stWidgetLabel"] p,
+    .stSelectbox [data-testid="stWidgetLabel"] p {{
+        color: {BRAND["text_primary"]} !important;
+        font-weight: 500 !important;
+        font-size: 0.88rem !important;
+        opacity: 1 !important;
+    }}
+
+    /* 사이드바 안의 라벨은 더 진하게 (배경이 카드라 대비 약함) */
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"],
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label,
+    section[data-testid="stSidebar"] .stSlider label,
+    section[data-testid="stSidebar"] .stSelectbox label,
+    section[data-testid="stSidebar"] .stMultiSelect label,
+    section[data-testid="stSidebar"] .stCheckbox label,
+    section[data-testid="stSidebar"] .stRadio label {{
+        color: {BRAND["text_primary"]} !important;
+        font-weight: 500 !important;
+        font-size: 0.88rem !important;
+        opacity: 1 !important;
+    }}
+
+    /* === st.metric 라벨 가독성 강화 === */
+    [data-testid="stMetricLabel"],
+    [data-testid="stMetricLabel"] p,
+    [data-testid="stMetricLabel"] div {{
+        color: {BRAND["text_secondary"]} !important;
+        font-weight: 500 !important;
+        font-size: 0.85rem !important;
+        opacity: 1 !important;
+    }}
+    [data-testid="stMetricValue"] {{
+        color: {BRAND["text_primary"]} !important;
+        font-weight: 700 !important;
+    }}
+    [data-testid="stMetricDelta"] {{
+        font-weight: 500 !important;
+    }}
+
+    /* === 셀렉트박스 내부 텍스트 === */
+    div[data-baseweb="select"] > div {{
+        color: {BRAND["text_primary"]} !important;
+    }}
+    div[data-baseweb="select"] [data-testid="stMarkdownContainer"] p {{
+        color: {BRAND["text_primary"]} !important;
+    }}
+
+    /* === 슬라이더 값 표시 === */
+    .stSlider [data-baseweb="slider"] > div > div > div {{
+        color: {BRAND["text_primary"]} !important;
+    }}
+
+    /* === 라디오/체크박스 옵션 텍스트 === */
+    .stRadio div[role="radiogroup"] label > div:nth-child(2),
+    .stCheckbox label > div:nth-child(2) {{
+        color: {BRAND["text_primary"]} !important;
+        font-weight: 500 !important;
     }}
 
     /* === 본문 헤더 === */
@@ -617,12 +698,12 @@ def render_landing_page():
         f"<div class='landing-hero'>"
         f"<div class='landing-hero-eyebrow'>Intelligent Energy Solution · SKKU NRL</div>"
         f"<div class='landing-hero-title'>Renewable microgrid digital twin<br/>for 100MW AI data centers</div>"
-        f"<div class='landing-hero-desc'>13개 통합 모듈로 PV 발전, 6-Layer HESS 저장, H₂ 변환, AI-EMS 디스패치, 정책 시나리오, 경제성 평가를 동시에 시뮬레이션합니다. μs(전력전자) ~ 1년(경제성) 다중 시간 스케일 통합.</div>"
+        f"<div class='landing-hero-desc'>4대 그룹·11개 세부 연구·2개 Sector(E-프론티어/E-솔루션)로 구성된 통합 디지털 트윈. 3-tier HESS(단주기 MSC + 중주기 LIB/SIB + 장주기 RTFB), N=7 무한접합 페로브스카이트 PV, AI-EMS 디스패치, 정책·경제성 평가를 μs(전력전자) ~ 1년(경제성) 다중 시간 스케일로 시뮬레이션합니다.</div>"
         f"<div class='landing-hero-stats'>"
-        f"<div><div class='landing-hero-stat-num'>100 MW</div><div class='landing-hero-stat-label'>AI Data Center Capacity</div></div>"
-        f"<div><div class='landing-hero-stat-num'>9.75 GWh</div><div class='landing-hero-stat-label'>6-Layer HESS Storage</div></div>"
-        f"<div><div class='landing-hero-stat-num'>68.7%</div><div class='landing-hero-stat-label'>Infinite-junction PV η<sub>STC</sub></div></div>"
-        f"<div><div class='landing-hero-stat-num'>13 + 3</div><div class='landing-hero-stat-label'>Integrated Modules</div></div>"
+        f"<div><div class='landing-hero-stat-num'>100 MW</div><div class='landing-hero-stat-label'>AI Data Center 부하</div></div>"
+        f"<div><div class='landing-hero-stat-num'>3-Tier</div><div class='landing-hero-stat-label'>HESS (MSC·LIB/SIB·RTFB)</div></div>"
+        f"<div><div class='landing-hero-stat-num'>η<sub>비집광</sub> 50%</div><div class='landing-hero-stat-label'>N=7 무한접합 (3단계 목표)</div></div>"
+        f"<div><div class='landing-hero-stat-num'>4·11·2</div><div class='landing-hero-stat-label'>Groups · Sub-tasks · Sectors</div></div>"
         f"</div>"
         f"</div>"
     )
@@ -635,7 +716,7 @@ def render_landing_page():
         {
             "icon": "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
             "title": "Physics-grade simulation",
-            "desc": "NOCT 셀 온도, IEC 61215, Nernst 전압, Faraday 효율 등 표준 물리식 정확 구현. PV 4종, HESS 6레이어 통합."
+            "desc": "NOCT 셀 온도, IEC 61215, Nernst 전압, Faraday 효율 등 표준 물리식 정확 구현. PV 4종, 3-tier HESS(MSC·LIB/SIB·RTFB) 통합."
         },
         {
             "icon": "M3 3v18h18M7 14l4-4 4 4 5-5",
